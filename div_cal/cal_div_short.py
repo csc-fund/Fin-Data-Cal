@@ -43,9 +43,12 @@ def get_div_by_year():
         df_code = DIV_TABLE[DIV_TABLE['stockcode'] == code]
         # 按照年份聚合:税前股息累加,税前股息计数,每年最后的日期
         df_date = df_code.groupby(['report_year'], sort='report_year').agg(
-            {'dvd_pre_tax': [('dvd_pre_tax_sum', 'sum')],
+            {'dvd_pre_tax': [('dvd_pre_tax_sum', 'sum'), ('dvd_pre_tax_count', 'count')],
              REFER_DATE: [('{}_max'.format(REFER_DATE), 'max')]
              })
+        # df_code['count'] = df_code.sort_values(['ann_date'], ascending=False).groupby('report_year', )[
+        #     'report_year'].transform('count')
+        # df_date = df_code.groupby(['report_year'], sort='report_year')
         # agg后的列名处理
         df_date.columns = df_date.columns.droplevel(0)
         df_date.reset_index(inplace=True)
@@ -143,8 +146,16 @@ def get_exp_div():
     print('保存csv用时: {} 秒'.format(time.time() - ed_time))
 
 
+# def get_div_by_code():
+# df_code = DIV_TABLE.groupby('stockcode')['ann_date'].nlargest(3)
+
+
 if __name__ == '__main__':
     # 生成年度股息表
     # get_div_by_year()
+    # get_div_by_code()
     # 计算预期股息
-    get_exp_div()
+    # get_exp_div()['ann_date'].nlargest(10)
+    df_code = DIV_TABLE.groupby('stockcode')
+    df_l = df_code['ann_date'].nlargest(10)
+    print()
