@@ -156,6 +156,15 @@ if __name__ == '__main__':
     # get_div_by_code()
     # 计算预期股息
     # get_exp_div()['ann_date'].nlargest(10)
-    df_code = DIV_TABLE.groupby('stockcode')
-    df_l = df_code['ann_date'].nlargest(10)
+    # DIV_TABLE['rank'] = DIV_TABLE[''].groupby('stockcode')
+    # ----------------排序后保留20期最近的历史记录----------------#
+    DIV_TABLE.sort_values(['stockcode', 'ann_date'], ascending=[1, 0], inplace=True)
+    df_head = DIV_TABLE.groupby(['stockcode']).head(20)
+    
+    # ----------------排序后保留20期最近的历史记录----------------#
+    # print(DIV_TABLE)
+    # df_l = DIV_TABLE.groupby(['stockcode']).head(5)
+    # df = pd.pivot_table(df_code, index=['stockcode'], columns=['report_period'], values='Zongfen',
+    #                          aggfunc=np.mean)
+
     print()
