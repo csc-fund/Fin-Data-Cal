@@ -153,35 +153,12 @@ def get_exp_div():
 if __name__ == '__main__':
     # 生成年度股息表
 
-    # get_div_by_year()
+    get_div_by_year()
     # get_div_by_code()
     # 计算预期股息
     # get_exp_div()['ann_date'].nlargest(10)
     # DIV_TABLE['rank'] = DIV_TABLE[''].groupby('stockcode')
-    st = time.time()
-    # ----------------排序后保留20期最近的历史记录----------------#
-    DIV_TABLE['dvd_pre_tax'] = DIV_TABLE['cash_dvd_per_sh_pre_tax'] * DIV_TABLE['s_div_baseshare'] * 10000  # 计算总股息
-    # 按照stockcode升序后,再按照ann_date降序
-    DIV_TABLE.sort_values(['stockcode', 'ann_date'], ascending=[1, 0], inplace=True)
 
-    # ---------------取排序号的前N个数据----------------#
-    DIV_TABLE = DIV_TABLE.groupby(['stockcode']).head(20)
-    df_group = DIV_TABLE.copy()
-
-    # ---------------计算组内日期排序----------------#
-    # 由于已经排序
-    df_group['ANNDATE_MAX'] = df_group.groupby(['stockcode'])['ann_date'].cumcount()
-
-    # ---------------转置----------------#
-    dft_ann_date = pd.pivot_table(df_group, index=['stockcode', ], columns=['ANNDATE_MAX'], values='ann_date')
-    dft_report_period = pd.pivot_table(df_group, index=['stockcode', ], columns=['ANNDATE_MAX'], values='report_period')
-    dft_dvd_pre_tax = pd.pivot_table(df_group, index=['stockcode', ], columns=['ANNDATE_MAX'], values='dvd_pre_tax')
-
-    # ---------------拼接----------------#
-    # inner的时候用的index为stockcode
-    df_code_info = pd.concat([dft_ann_date, dft_report_period, dft_dvd_pre_tax], axis=1, join='inner')
-    en = time.time()
-    per = en - st
     #
     # df_head.
     # ----------------排序后保留20期最近的历史记录----------------#
