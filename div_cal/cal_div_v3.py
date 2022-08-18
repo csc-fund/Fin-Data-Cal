@@ -41,9 +41,9 @@ INFO_TABLE = pd.pivot_table(df_group, index=['stockcode'], columns=['ANNDATE_MAX
 # 2.MV_TABLE表与INFO_TABLE表进行矩阵计算
 ##################################################################
 MV_TABLE = pd.read_parquet('mv.parquet')
-MV_TABLE = MV_TABLE.iloc[-10000:, :]
+# MV_TABLE = MV_TABLE.iloc[-10000:, :]
 MV_TABLE = MV_TABLE[['stockcode', 'ann_date', ]]
-MV_INFO_TABLE = pd.merge(MV_TABLE, INFO_TABLE[['ann_date', 'report_period']], how='left', on='stockcode')
+MV_INFO_TABLE = pd.merge(MV_TABLE, INFO_TABLE[['ann_date', 'report_period', 'dvd_pre_tax']], how='left', on='stockcode')
 
 # ---------------计算可用历史信息的信息矩阵----------------#
 for i in range(LAG_PERIOD):
