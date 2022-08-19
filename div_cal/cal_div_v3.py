@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 # ----------------参数和命名----------------#
-LAG_PERIOD = 3  # 滞后期: 当前时期为T,该参数表示使用了[T-2,T-3...,T-LAG_PERIOD]来预测T-1
+LAG_PERIOD = 4  # 滞后期: 当前时期为T,该参数表示使用了[T-2,T-3...,T-LAG_PERIOD]来预测T-1
 REFER_DATE = 'ann_date'  # 分红确认的日期: 可选ann_date,s_div_prelandate
 MERGE_COLUMN = ['report_year', 'dvd_pre_tax_sum', REFER_DATE + '_max']  # 计算出的列的命名
 
@@ -41,17 +41,20 @@ INFO_TABLE = pd.pivot_table(df_group, index=['stockcode'], columns=['ANNDATE_MAX
 # 2.MV_TABLE表与INFO_TABLE表进行矩阵计算
 ##################################################################
 MV_TABLE = pd.read_parquet('mv.parquet')
-MV_TABLE = MV_TABLE.iloc[-10000:, :]
+# MV_TABLE = MV_TABLE.iloc[-10000:, :]
 MV_TABLE = MV_TABLE[['stockcode', 'ann_date', ]]
 MV_INFO_TABLE = pd.merge(MV_TABLE, INFO_TABLE[['ann_date', 'report_period', 'dvd_pre_tax']], how='left', on='stockcode')
+
+# print(time.time()-st)
+MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['stockcode'] == '600738.SH']
 
 # ---------------矩阵运算----------------#
 for i in range(LAG_PERIOD):
     # ---------------可用信息矩阵----------------#
     MV_INFO_TABLE[('info', i)] = np.where(MV_INFO_TABLE['ann_date'] > MV_INFO_TABLE[('ann_date', i)], 1, 0)
     # ---------------目标年份矩阵----------------#
-for i in range(LAG_PERIOD):
-    MV_INFO_TABLE[('year', i)] = MV_INFO_TABLE[('ann_date', i)].astype('str').str[:4].astype('float') - 1
+# for i in range(LAG_PERIOD):
+#     MV_INFO_TABLE[('year', i)] = MV_INFO_TABLE[('ann_date', i)].astype('str').str[:4].astype('float') - 1
 
 for i in range(LAG_PERIOD):
     # ---------------可用报告期矩阵----------------#
@@ -86,8 +89,23 @@ for i in range(LAG_PERIOD):
     MV_INFO_TABLE[('info_div_ar', i)] = MV_INFO_TABLE[('info_report_ar', i)] * MV_INFO_TABLE[('dvd_pre_tax', i)]
 
 for i in range(LAG_PERIOD):
-    # ---------------可用报告期矩阵-取出分红类型-取出简单年化系数-求出非年化分红----------------#
-    MV_INFO_TABLE[('info_div_total', i)] = MV_INFO_TABLE[('info_report_isar', i)] * MV_INFO_TABLE[('dvd_pre_tax', i)]
+    # ---------------可用报告期矩阵-取出分红类型-取出简单年化系数-求出年化分红----------------#
+    MV_INFO_TABLE[('info_div_addar', i)] = MV_INFO_TABLE[('info_div_ar', i)] * MV_INFO_TABLE[
+        ('info_report_isar', i)] + MV_INFO_TABLE[('dvd_pre_tax', i)] * MV_INFO_TABLE[('info', i)]
 
+for i in range(LAG_PERIOD):
+    MV_INFO_TABLE[('info_report_isar_new', i)] = MV_INFO_TABLE[('info_report_isar', i)]
+
+for i in reversed(range(LAG_PERIOD)):
+    # ---------------按照合并年份更新年化股息----------------#
+    j = i - 1
+    if j < 0:
+        break
+    MV_INFO_TABLE[('info_report_isar_new', i)] = np.where(
+        MV_INFO_TABLE[('info_report_year', j)] == MV_INFO_TABLE[('info_report_year', i)],
+        0, MV_INFO_TABLE[('info_report_isar', i)])
+
+MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
+MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['ann_date'].astype('str').str[:-4].isin(['2018','2019'])]
 en = time.time()
 per = en - st
