@@ -74,12 +74,20 @@ for i in range(LAG_PERIOD):
     # 年化系数
     MV_INFO_TABLE[('info_report_ar', i)] = np.where(
         MV_INFO_TABLE[('info_report_ar', i)] != 0.0,
-        1 / MV_INFO_TABLE[('info_report_ar', i)], 0.0)
+        (1.0 / MV_INFO_TABLE[('info_report_ar', i)]) - 1.0, 0.0)
+
+for i in range(LAG_PERIOD):
+    # ---------------可用报告期矩阵-取出分红类型-年化判断----------------#
+    MV_INFO_TABLE[('info_report_isar', i)] = np.where(MV_INFO_TABLE[('info_report_ar', i)] != 0.0, 1, 0)
 
 for i in range(LAG_PERIOD):
     # ---------------可用报告期矩阵-取出分红类型-取出简单年化系数-求出总年化分红----------------#
     MV_INFO_TABLE[('dvd_pre_tax', i)].fillna(0.0, inplace=True)
-    MV_INFO_TABLE[('info_div', i)] = MV_INFO_TABLE[('info_report_ar', i)] * MV_INFO_TABLE[('dvd_pre_tax', i)]
+    MV_INFO_TABLE[('info_div_ar', i)] = MV_INFO_TABLE[('info_report_ar', i)] * MV_INFO_TABLE[('dvd_pre_tax', i)]
+
+for i in range(LAG_PERIOD):
+    # ---------------可用报告期矩阵-取出分红类型-取出简单年化系数-求出非年化分红----------------#
+    MV_INFO_TABLE[('info_div_total', i)] = MV_INFO_TABLE[('info_report_isar', i)] * MV_INFO_TABLE[('dvd_pre_tax', i)]
 
 en = time.time()
 per = en - st
