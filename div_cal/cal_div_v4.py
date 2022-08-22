@@ -41,12 +41,13 @@ INFO_TABLE = pd.pivot_table(df_group, index=['stockcode'], columns=['ANNDATE_MAX
 MV_TABLE = pd.read_parquet('mv.parquet')
 MV_TABLE = MV_TABLE[['stockcode', 'ann_date', ]]
 MV_INFO_TABLE = pd.merge(MV_TABLE, INFO_TABLE[['ann_date', 'report_period', 'dvd_pre_tax']], how='left', on='stockcode')
+
 # MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['stockcode'] == '600738.SH']
 
 # ---------------速度记录---------------#
+del MV_TABLE, INFO_TABLE, DIV_TABLE, df_group
 st1 = time.time()
-# MV_INFO_TABLE.fillna(0.0, inplace=True)
-print('fillna', time.time() - st1)
+MV_INFO_TABLE.fillna(0, inplace=True)
 ##################################################################
 # 矩阵计算
 ##################################################################
@@ -56,27 +57,24 @@ for i in range(LAG_PERIOD):
     print('可用信息矩阵', time.time() - st1)
 
     # ---------------可用报告期矩阵-info_report_year---------------#
-    # df1 = MV_INFO_TABLE[('info', i)]
-    # df2 = MV_INFO_TABLE[('report_period', i)].astype('str').str[:4].astype('float')
-    # MV_INFO_TABLE[('info_report_year', i)] = pd.eval('df1 * df2')
-    MV_INFO_TABLE[('info_report_year', i)] = np.where(MV_INFO_TABLE[('info', i)] == 1,
-                                                      MV_INFO_TABLE[('report_period', i)].astype(
-                                                          'str').str[:4].astype('float'), 0.0)
+    MV_INFO_TABLE[('report_period', i)] = MV_INFO_TABLE[('report_period', i)].astype('int')
+    MV_INFO_TABLE[('info_report_year', i)] = MV_INFO_TABLE[('report_period', i)] // 10000  # 取出年
     print('可用报告期矩阵', time.time() - st1)
     # ---------------年化因子矩阵----------------#
     # 取出日期
-    MV_INFO_TABLE[('info_report_ar', i)] = np.where(
-        MV_INFO_TABLE[('report_period', i)] != 0.0,
-        MV_INFO_TABLE[('report_period', i)].astype('str').str[4:].str.lstrip('0'), 0.0)
+    # MV_INFO_TABLE[('info_report_ar', i)] = np.where(
+    #     MV_INFO_TABLE[('report_period', i)] != 0,
+    #     MV_INFO_TABLE[('report_period', i)] % 10000, 0)  # 取出月和日
+    MV_INFO_TABLE[('info_report_ar', i)] = MV_INFO_TABLE[('report_period', i)] % 10000  # 取出月和日
     # 求年化
-    MV_INFO_TABLE[('info_report_ar', i)] = MV_INFO_TABLE[('info_report_ar', i)].astype('float') / 1231.0
-    # 年化因子
+    # MV_INFO_TABLE[('info_report_ar', i)] = MV_INFO_TABLE[('info_report_ar', i)] / 1231
+    # # 年化因子
     MV_INFO_TABLE[('info_report_ar', i)] = np.where(
-        MV_INFO_TABLE[('info_report_ar', i)] != 0.0,
-        (1.0 / MV_INFO_TABLE[('info_report_ar', i)]) - 1.0, 0.0)
-    MV_INFO_TABLE[('info_report_ar', i)] = MV_INFO_TABLE[('info_report_ar', i)] * MV_INFO_TABLE[('info', i)]
+        MV_INFO_TABLE[('info_report_ar', i)] != 0,
+        ((1 / (MV_INFO_TABLE[('info_report_ar', i)] / 1231)) - 1.0) * MV_INFO_TABLE[('info', i)], 0.0)
+    # MV_INFO_TABLE[('info_report_ar', i)] = MV_INFO_TABLE[('info_report_ar', i)] * MV_INFO_TABLE[('info', i)]
     print('年化因子矩阵', time.time() - st1)
-    # ---------------可用分红矩阵----------------#
+    # ---------------可用累积分红矩阵----------------#
     MV_INFO_TABLE[('dvd_pre_tax_sum', i)] = MV_INFO_TABLE[('dvd_pre_tax', i)] * MV_INFO_TABLE[('info', i)]
     print('可用分红矩阵', time.time() - st1)
 
@@ -107,8 +105,9 @@ for i in range(LAG_PERIOD):
                     MV_INFO_TABLE[('dvd_pre_tax_sum', j)] > 0),
             MV_INFO_TABLE[('dvd_pre_tax_sum', j)], MV_INFO_TABLE[('year_sum', i)])
 
-print(time.time() - st1)
+per = time.time() - st1
 
 # ---------------测试数据---------------#
 MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
 # MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['ann_date'].astype('str').str[:-4].isin(['2017','2018', '2019'])]
+time.time() - st1
