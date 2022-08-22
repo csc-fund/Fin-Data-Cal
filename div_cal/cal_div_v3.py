@@ -52,9 +52,6 @@ MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['stockcode'] == '600738.SH']
 for i in range(LAG_PERIOD):
     # ---------------可用信息矩阵----------------#
     MV_INFO_TABLE[('info', i)] = np.where(MV_INFO_TABLE['ann_date'] > MV_INFO_TABLE[('ann_date', i)], 1, 0)
-    # ---------------目标年份矩阵----------------#
-# for i in range(LAG_PERIOD):
-#     MV_INFO_TABLE[('year', i)] = MV_INFO_TABLE[('ann_date', i)].astype('str').str[:4].astype('float') - 1
 
 for i in range(LAG_PERIOD):
     # ---------------可用报告期矩阵----------------#
@@ -86,26 +83,73 @@ for i in range(LAG_PERIOD):
 for i in range(LAG_PERIOD):
     # ---------------可用报告期矩阵-取出分红类型-取出简单年化系数-求出总年化分红----------------#
     MV_INFO_TABLE[('dvd_pre_tax', i)].fillna(0.0, inplace=True)
-    MV_INFO_TABLE[('info_div_ar', i)] = MV_INFO_TABLE[('info_report_ar', i)] * MV_INFO_TABLE[('dvd_pre_tax', i)]
+    # MV_INFO_TABLE[('info_div_ar', i)] = MV_INFO_TABLE[('info_report_ar', i)] * MV_INFO_TABLE[('dvd_pre_tax', i)]
 
 for i in range(LAG_PERIOD):
-    # ---------------可用报告期矩阵-取出分红类型-取出简单年化系数-求出年化分红----------------#
-    MV_INFO_TABLE[('info_div_addar', i)] = MV_INFO_TABLE[('info_div_ar', i)] * MV_INFO_TABLE[
-        ('info_report_isar', i)] + MV_INFO_TABLE[('dvd_pre_tax', i)] * MV_INFO_TABLE[('info', i)]
-
-for i in range(LAG_PERIOD):
+    # ---------------复制久的isar----------------#
     MV_INFO_TABLE[('info_report_isar_new', i)] = MV_INFO_TABLE[('info_report_isar', i)]
 
-for i in reversed(range(LAG_PERIOD)):
+for right in reversed(range(LAG_PERIOD)):
     # ---------------按照合并年份更新年化股息----------------#
-    j = i - 1
-    if j < 0:
+    left = right - 1
+    if left < 0:
         break
-    MV_INFO_TABLE[('info_report_isar_new', i)] = np.where(
-        MV_INFO_TABLE[('info_report_year', j)] == MV_INFO_TABLE[('info_report_year', i)],
-        0, MV_INFO_TABLE[('info_report_isar', i)])
+    MV_INFO_TABLE[('info_report_isar_new', right)] = np.where(
+        MV_INFO_TABLE[('info_report_year', left)] == MV_INFO_TABLE[('info_report_year', right)],
+        0, MV_INFO_TABLE[('info_report_isar', right)])
 
+for i in range(LAG_PERIOD):
+    # ---------------复制久的isar----------------#
+    MV_INFO_TABLE[('dvd_pre_tax_sum', i)] = MV_INFO_TABLE[('dvd_pre_tax', i)] * MV_INFO_TABLE[('info', i)]
+
+for right in reversed(range(LAG_PERIOD)):
+    # ---------------按照合并年份更新年化股息----------------#
+    left = right - 1
+    if left < 0:
+        break
+    MV_INFO_TABLE[('dvd_pre_tax_sum', left)] = np.where(
+        MV_INFO_TABLE[('info_report_year', left)] == MV_INFO_TABLE[('info_report_year', right)],
+        MV_INFO_TABLE[('dvd_pre_tax_sum', left)] + MV_INFO_TABLE[('dvd_pre_tax_sum', right)],
+        MV_INFO_TABLE[('dvd_pre_tax_sum', left)])
+
+for i in range(LAG_PERIOD):
+    # ---------------复制久的isar----------------#
+    MV_INFO_TABLE[('dvd_pre_tax_sum_ar', i)] = MV_INFO_TABLE[('dvd_pre_tax_sum', i)] + MV_INFO_TABLE[
+        ('info_report_isar_new', i)] * MV_INFO_TABLE[('dvd_pre_tax_sum', i)] * MV_INFO_TABLE[('info_report_ar', i)]
+
+for i in range(LAG_PERIOD):
+    MV_INFO_TABLE[('info_year_flag', i)] = 1 * MV_INFO_TABLE[('info', i)]
+
+for right in reversed(range(LAG_PERIOD)):
+    # ---------------求出最新列标志----------------#
+    left = right - 1
+    if left < 0:
+        break
+    MV_INFO_TABLE[('info_year_flag', right)] = np.where(
+        MV_INFO_TABLE[('info_report_year', left)] == MV_INFO_TABLE[('info_report_year', right)],
+        0, 1)
+
+for i in range(LAG_PERIOD):
+    # ---------------得到最终的累积年化和---------------#
+    MV_INFO_TABLE[('dvd_pre_tax_final', i)] = MV_INFO_TABLE[('info_year_flag', i)] * MV_INFO_TABLE[
+        ('dvd_pre_tax_sum_ar', i)]
+
+# ---------------目标年份矩阵----------------#
+for i in range(LAG_PERIOD):
+    MV_INFO_TABLE[('year', i)] = 2020.0 - i
+for i in range(LAG_PERIOD):
+    MV_INFO_TABLE[('year_sum', i)] = 0.0
+
+# ---------------在目标年份矩阵中迭代合并----------------#
+for i in range(LAG_PERIOD):
+    for j in range(LAG_PERIOD):
+        MV_INFO_TABLE[('year_sum', i)] = np.where(
+            (MV_INFO_TABLE[('year', i)] == MV_INFO_TABLE[('info_report_year', j)]) & (
+                    MV_INFO_TABLE[('dvd_pre_tax_final', j)] > 0),
+            MV_INFO_TABLE[('dvd_pre_tax_final', j)], MV_INFO_TABLE[('year_sum', i)])
+
+# ---------------测试数据---------------#
 MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
-MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['ann_date'].astype('str').str[:-4].isin(['2018','2019'])]
+MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['ann_date'].astype('str').str[:-4].isin(['2018', '2019'])]
 en = time.time()
 per = en - st
