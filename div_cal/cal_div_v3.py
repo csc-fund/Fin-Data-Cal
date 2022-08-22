@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 # ----------------参数和命名----------------#
-LAG_PERIOD = 4  # 滞后期: 当前时期为T,该参数表示使用了[T-2,T-3...,T-LAG_PERIOD]来预测T-1
+LAG_PERIOD = 10  # 滞后期: 当前时期为T,该参数表示使用了[T-2,T-3...,T-LAG_PERIOD]来预测T-1
 REFER_DATE = 'ann_date'  # 分红确认的日期: 可选ann_date,s_div_prelandate
 MERGE_COLUMN = ['report_year', 'dvd_pre_tax_sum', REFER_DATE + '_max']  # 计算出的列的命名
 
@@ -137,10 +137,11 @@ for i in range(LAG_PERIOD):
 # ---------------目标年份矩阵----------------#
 for i in range(LAG_PERIOD):
     MV_INFO_TABLE[('year', i)] = 2020.0 - i
+    # pd.concat([], axis=1)
 for i in range(LAG_PERIOD):
     MV_INFO_TABLE[('year_sum', i)] = 0.0
 
-# ---------------在目标年份矩阵中迭代合并----------------#
+# ---------------在目标年份矩阵中迭代合并-得到最终的总分红----------------#
 for i in range(LAG_PERIOD):
     for j in range(LAG_PERIOD):
         MV_INFO_TABLE[('year_sum', i)] = np.where(
@@ -150,6 +151,6 @@ for i in range(LAG_PERIOD):
 
 # ---------------测试数据---------------#
 MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
-MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['ann_date'].astype('str').str[:-4].isin(['2018', '2019'])]
+# MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['ann_date'].astype('str').str[:-4].isin(['2017','2018', '2019'])]
 en = time.time()
 per = en - st
