@@ -4,7 +4,7 @@ import pandas as pd
 
 # ----------------参数和命名----------------#
 TARGET_YEAR = 2020  # 参照期
-LAG_PERIOD = 4  # 滞后期
+LAG_PERIOD = 5  # 滞后期
 REFER_DATE = 'ann_date'  # 分红确认的日期: 可选ann_date,s_div_prelandate
 
 # ----------------读取原始数据----------------#
