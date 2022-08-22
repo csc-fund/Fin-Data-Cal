@@ -45,10 +45,9 @@ MV_INFO_TABLE.fillna(0, inplace=True)  # 没有merge到的缺失信息用0填充
 del MV_TABLE, INFO_TABLE, DIV_TABLE, df_group  # 释放内存
 
 # ---------------测试数据---6007383在2018年3次分红------------#
-MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['stockcode'] == '600738.SH']
+# MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['stockcode'] == '600738.SH']
 
-st1 = time.time()
-
+st = time.time()
 ##################################################################
 # 矩阵计算
 ##################################################################
@@ -57,11 +56,12 @@ for i in range(LAG_PERIOD):
     MV_INFO_TABLE[('info', i)] = np.where(MV_INFO_TABLE['ann_date'] > MV_INFO_TABLE[('ann_date', i)], 1, 0)
 
     # ---------------可用报告期矩阵-info_report_year---------------#
-    MV_INFO_TABLE[('report_period', i)] = MV_INFO_TABLE[('report_period', i)].astype('int')
-    MV_INFO_TABLE[('info_report_year', i)] = MV_INFO_TABLE[('report_period', i)] // 10000  # 取出年
+    MV_INFO_TABLE[('report_period', i)] = MV_INFO_TABLE[('report_period', i)].astype('int') * MV_INFO_TABLE[('info', i)]
+    MV_INFO_TABLE[('info_report_year', i)] = (MV_INFO_TABLE[('report_period', i)] // 10000)  # 取出年
 
     # ---------------年化因子矩阵----------------#
-    #  %10000:取出月和日 /1231 求年化因子
+    #  %10000:取出月和日
+    #  /1231 求年化因子
     MV_INFO_TABLE[('info_report_ar', i)] = np.where(
         MV_INFO_TABLE[('report_period', i)] != 0,
         ((1 / ((MV_INFO_TABLE[('report_period', i)] % 10000) / 1231)) - 1.0) * MV_INFO_TABLE[('info', i)], 0.0)
@@ -69,31 +69,50 @@ for i in range(LAG_PERIOD):
     # ---------------可用累积分红矩阵----------------#
     MV_INFO_TABLE[('dvd_pre_tax_sum', i)] = MV_INFO_TABLE[('dvd_pre_tax', i)] * MV_INFO_TABLE[('info', i)]
 
+    # ---------------分红因子激活矩阵----------------#
+    MV_INFO_TABLE[('ar_activate', i)] = MV_INFO_TABLE[('info_report_year', i)]
+
     # ---------------目标年份矩阵----------------#
-    MV_INFO_TABLE[('year', i)] = TARGET_YEAR - i
-    MV_INFO_TABLE[('year_sum', i)] = 0.0
+    MV_INFO_TABLE[('target_year', i)] = TARGET_YEAR - i
+    MV_INFO_TABLE[('target_year_sum', i)] = 0.0
+    MV_INFO_TABLE[('target_year_sum_ar', i)] = 0.0
 
 # ---------------在目标年份矩阵中迭代合并-得到最终的总分红----------------#
 for i in range(LAG_PERIOD):
-    # ---------------分红累积矩阵----------------#
-    # 从右向左累积
+
     right = LAG_PERIOD - 1 - i  # LAG_PERIOD 4: 0,1,2,3 ;right 3,2,1,0
     left = right - 1
     # 从右往左累积到最左边的列
     if left >= 0:
+        # ---------------分红累积矩阵----------------#
         MV_INFO_TABLE[('dvd_pre_tax_sum', left)] = np.where(
             MV_INFO_TABLE[('info_report_year', left)] == MV_INFO_TABLE[('info_report_year', right)],  # 只累加相同年份
             MV_INFO_TABLE[('dvd_pre_tax_sum', left)] + MV_INFO_TABLE[('dvd_pre_tax_sum', right)],
             MV_INFO_TABLE[('dvd_pre_tax_sum', left)])
 
+        # ---------------分红因子激活矩阵----------------#
+        MV_INFO_TABLE[('ar_activate', right)] = np.where(
+            MV_INFO_TABLE[('info_report_year', right)] == MV_INFO_TABLE[('info_report_year', left)],  # 右边与左边相同时把右边置0
+            0, 1)
+
     # ---------------填充目标日期矩阵----------------#
     for j in reversed(range(LAG_PERIOD)):  # 从同一年使用最新的累计分红 ,并排除0,保证分红更新
-        MV_INFO_TABLE[('year_sum', i)] = np.where(
-            (MV_INFO_TABLE[('year', i)] == MV_INFO_TABLE[('info_report_year', j)])
+
+        # ---------------填充-实际历史分红----------------#
+        MV_INFO_TABLE[('target_year_sum', i)] = np.where(
+            (MV_INFO_TABLE[('target_year', i)] == MV_INFO_TABLE[('info_report_year', j)])
             & (MV_INFO_TABLE[('dvd_pre_tax_sum', j)] > 0), MV_INFO_TABLE[('dvd_pre_tax_sum', j)],
-            MV_INFO_TABLE[('year_sum', i)])
+            MV_INFO_TABLE[('target_year_sum', i)])
+
+        # ---------------填充-年化历史分红----------------#
+        MV_INFO_TABLE[('target_year_sum_ar', i)] = np.where(
+            (MV_INFO_TABLE[('target_year', i)] == MV_INFO_TABLE[('info_report_year', j)])
+            & (MV_INFO_TABLE[('dvd_pre_tax_sum', j)] > 0),
+            MV_INFO_TABLE[('dvd_pre_tax_sum', j)] * (
+                        1 + (MV_INFO_TABLE[('info_report_ar', j)] * MV_INFO_TABLE[('ar_activate', j)])),
+            MV_INFO_TABLE[('target_year_sum_ar', i)])
 
 # ---------------测试数据---------------#
-print('运行耗时:{}'.format(time.time() - st1))
+print(time.time() - st)
 MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
 # MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['ann_date'].astype('str').str[:-4].isin(['2017','2018', '2019'])]
