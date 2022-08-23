@@ -2,8 +2,9 @@ import time
 import numpy as np
 import pandas as pd
 
+# python -m timeit cal_div_v5.py
 # ----------------参数和命名----------------#
-LAG_PERIOD = 4  # 滞后期
+LAG_PERIOD = 5  # 滞后期
 
 # ----------------读取原始数据----------------#
 DIV_TABLE = pd.read_parquet('AShareDividend.parquet')
@@ -39,21 +40,22 @@ INFO_TABLE = pd.pivot_table(df_group, index=['stockcode'], columns=['ANNDATE_MAX
 ##################################################################
 MV_TABLE = pd.read_parquet('mv.parquet')[['stockcode', 'ann_date', ]]
 MV_INFO_TABLE = pd.merge(MV_TABLE, INFO_TABLE[['ann_date', 'report_period', 'dvd_pre_tax']], how='left', on='stockcode')
-TARGET_YEAR = (MV_INFO_TABLE['ann_date'].max() // 10000) - 1  # 参照期
+TARGET_YEAR = (int(MV_INFO_TABLE['ann_date'].max()) // 10000) - 1  # 参照期
 MV_INFO_TABLE.fillna(0, inplace=True)  # 没有merge到的缺失信息用0填充
 del MV_TABLE, INFO_TABLE, df_group  # 释放内存
 
-# ---------------测试数据---600738.SH在2018年有3次分红------------#
+##################################################################
+# 测试数据---600738.SH在2018年有3次分红
+##################################################################
 MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['stockcode'] == '600738.SH']
+st = time.time()
 
 ##################################################################
-# 3.矩阵计算
+# 3.求出用于计算的不同矩阵
 ##################################################################
-st = time.time()
 # ---------------重命名列名----------------#
 MV_INFO_TABLE.columns = [i[0] + '_' + str(+i[1]) if isinstance(i, tuple) else i for i in MV_INFO_TABLE.columns]
-
-# ---------------求出用于计算的基本矩阵:信息矩阵,年化因子矩阵,报告期矩阵,累积分红矩阵,分红因子激活矩阵,目标年份矩阵-----------------#
+# ---------------基本矩阵:信息矩阵,年化因子矩阵,报告期矩阵,累积分红矩阵,分红因子激活矩阵,目标年份矩阵-----------------#
 for i in range(LAG_PERIOD):
     # ---------------可用信息矩阵----------------#
     MV_INFO_TABLE['info_{}'.format(i)] = np.where(MV_INFO_TABLE.eval('ann_date>ann_date_{i}'.format(i=i)), 1, 0)
@@ -65,18 +67,19 @@ for i in range(LAG_PERIOD):
 
     # ---------------其他矩阵----------------#
     MV_INFO_TABLE.eval("""
-    info_report_year_{i} = report_period_{i} * info_{i} //10000 #报告期矩阵
-    dvd_pre_tax_sum_{i} = dvd_pre_tax_{i}*info_{i} #累积分红矩阵
-    ar_activate_{i} = info_report_ar_{i} #分红因子激活矩阵
-    target_year_{i} = @TARGET_YEAR - @i #目标年份矩阵
-    target_year_sum_{i} = 0.0 #目标年份累积矩阵-实际
-    target_year_sum_ar_{i} = 0.0 #目标年份累积矩阵-年化
-    """.format(i=i), inplace=True)
+        info_report_year_{i} = report_period_{i} * info_{i} //10000 #报告期矩阵
+        dvd_pre_tax_sum_{i} = dvd_pre_tax_{i}*info_{i} #累积分红矩阵
+        ar_activate_{i} = info_report_ar_{i} #分红因子激活矩阵
+        target_year_{i} = @TARGET_YEAR - @i #目标年份矩阵
+        target_year_sum_{i} = 0.0 #目标年份累积矩阵-实际
+        target_year_sum_ar_{i} = 0.0 #目标年份累积矩阵-年化
+        """.format(i=i), inplace=True)
 
 print('矩阵基础计算完成', time.time() - st)
 
-# ---------------在目标输出矩阵中迭代填充-得到最终需要的值----------------#
-
+##################################################################
+# 4.在目标输出列中用where迭代填充
+##################################################################
 for i in range(LAG_PERIOD):
     right = LAG_PERIOD - 1 - i  # LAG_PERIOD 4: 0,1,2,3 ;right 3,2,1,0
     left = right - 1
@@ -84,6 +87,7 @@ for i in range(LAG_PERIOD):
     if left >= 0:
         same_expr = MV_INFO_TABLE['info_report_year_{}'.format(left)] == MV_INFO_TABLE[
             'info_report_year_{}'.format(right)]
+        # same_expr = MV_INFO_TABLE.eval('info_report_year_{}==info_report_year_{}'.format(left, right))  # 性能测试
         # ---------------分红累积矩阵----------------#
         MV_INFO_TABLE['dvd_pre_tax_sum_{}'.format(left)] = np.where(
             same_expr,
@@ -102,7 +106,8 @@ for i in range(LAG_PERIOD):
         # 从同一年使用最新的累计分红 ,并排除0,保证分红更新
         same_expr = (MV_INFO_TABLE['target_year_{}'.format(i)] == MV_INFO_TABLE[
             'info_report_year_{}'.format(j)]) & MV_INFO_TABLE['dvd_pre_tax_sum_{}'.format(j)] > 0
-
+        # same_expr = MV_INFO_TABLE.eval('(target_year_{i}==info_report_year_{j})&dvd_pre_tax_sum_{j}>0'.format(i=i, j=j))
+        #
         # ---------------填充-实际历史分红----------------#
         MV_INFO_TABLE['target_year_sum_{}'.format(i)] = np.where(
             same_expr,
@@ -120,17 +125,18 @@ for i in range(LAG_PERIOD):
 
     # --------------填充当前交易日的T-1期的列----------------#
     MV_INFO_TABLE.eval("""
-        target_year_t_{i} = ann_date//10000-1-{i}
-        target_flag_{i}= target_year_0-target_year_t_{i}
-        target_real_{i}=0
-        target_exp_ar_{i}=0
-        """.format(i=i), inplace=True)
+            target_year_t_{i} = ann_date//10000-1-{i}
+            target_flag_{i}= target_year_0-target_year_t_{i}
+            target_real_{i}=0
+            target_exp_ar_{i}=0
+            """.format(i=i), inplace=True)
     # 更新需要的滞后年份
     MV_INFO_TABLE['target_flag_{}'.format(i)] = np.where(MV_INFO_TABLE['target_flag_{}'.format(i)] > LAG_PERIOD, 0,
                                                          MV_INFO_TABLE['target_flag_{}'.format(i)])
 
     for j in range(LAG_PERIOD):
         same_expr = MV_INFO_TABLE['target_flag_{}'.format(i)] == j
+        # same_expr = MV_INFO_TABLE.eval('target_flag_{}==@j'.format(i))
         # ---------------填充-实际历史分红----------------#
         MV_INFO_TABLE['target_real_{}'.format(i)] = np.where(same_expr,
                                                              MV_INFO_TABLE['target_year_sum_{}'.format(j)],
@@ -145,6 +151,17 @@ for i in range(LAG_PERIOD):
 
 print('矩阵填充完成', time.time() - st)
 
+# ---------------OLS外推预期----------------#
+
+
+# 计算
+MV_INFO_TABLE.eval("""
+          target_exp_linear_0 = 0
+
+          """, inplace=True)
+
+print('OLS完成', time.time() - st)
+
 # ---------------输出目标数据---------------#
 MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
 MV_INFO_TABLE = MV_INFO_TABLE[
@@ -153,5 +170,4 @@ MV_INFO_TABLE = MV_INFO_TABLE[
 
 # MV_INFO_TABLE.to_csv('final.csv')
 # del MV_INFO_TABLE
-
 # MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['ann_date'].astype('str').str[:-4].isin(['2017','2018', '2019'])]
