@@ -130,15 +130,17 @@ for i in range(LAG_PERIOD):
                                                          MV_INFO_TABLE['target_flag_{}'.format(i)])
 
     for j in range(LAG_PERIOD):
+        same_expr = MV_INFO_TABLE['target_flag_{}'.format(i)] == j
         # ---------------填充-实际历史分红----------------#
-        MV_INFO_TABLE['target_real_{}'.format(i)] = np.where(MV_INFO_TABLE['target_flag_{}'.format(i)] == j,
+        MV_INFO_TABLE['target_real_{}'.format(i)] = np.where(same_expr,
                                                              MV_INFO_TABLE['target_year_sum_{}'.format(j)],
                                                              MV_INFO_TABLE['target_real_{}'.format(i)])
 
         # ---------------填充-年化历史分红----------------#
-        MV_INFO_TABLE['target_exp_ar_{}'.format(i)] = np.where(MV_INFO_TABLE['target_flag_{}'.format(i)] == j,
+        MV_INFO_TABLE['target_exp_ar_{}'.format(i)] = np.where(same_expr,
                                                                MV_INFO_TABLE['target_year_sum_ar_{}'.format(j)],
                                                                MV_INFO_TABLE['target_exp_ar_{}'.format(i)])
+        del same_expr
     # print('求滞后完成', time.time() - st)
 
 print('矩阵填充完成', time.time() - st)
