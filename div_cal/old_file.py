@@ -140,7 +140,7 @@ for i in range(LAG_PERIOD):
         # same_expr = MV_INFO_TABLE.eval(
         #     '(target_year_{i}==info_report_year_{j}) & dvd_pre_tax_sum_{j}>0'.format(i=i, j=j))
         same_expr = (MV_INFO_TABLE['target_year_{}'.format(i)] == MV_INFO_TABLE[
-            'target_year_{}'.format(j)]) & MV_INFO_TABLE['dvd_pre_tax_sum_{}'.format(j)] > 0
+            'info_report_year_{}'.format(j)]) & (MV_INFO_TABLE['dvd_pre_tax_sum_{}'.format(j)] > 0)
         # target_year_sum_ar = MV_INFO_TABLE.eval('dvd_pre_tax_sum_{j}*(1+ar_activate_{j})'.format(j=j))  # 激活年化因子
 
         # ---------------填充-实际历史分红----------------#
@@ -157,7 +157,7 @@ for i in range(LAG_PERIOD):
             MV_INFO_TABLE['target_year_sum_ar_{}'.format(i)])
 
         del same_expr
-    # print('填充目标日期矩阵', time.time() - st)
+    print('填充目标日期矩阵', time.time() - st)
 # ---------------测试数据---------------#
 print('填充完成', time.time() - st)
 # del MV_INFO_TABLE

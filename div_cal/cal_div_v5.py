@@ -4,7 +4,7 @@ import pandas as pd
 
 # python -m timeit cal_div_v5.py
 # ----------------参数和命名----------------#
-LAG_PERIOD = 5  # 滞后期
+LAG_PERIOD = 4  # 滞后期
 
 # ----------------读取原始数据----------------#
 DIV_TABLE = pd.read_parquet('AShareDividend.parquet')
@@ -123,33 +123,38 @@ for i in range(LAG_PERIOD):
         del same_expr
     # print('填充完成', time.time() - st)
 
+print('矩阵填充完成', time.time() - st)
+
+for i in range(LAG_PERIOD):
     # --------------填充当前交易日的T-1期的列----------------#
     MV_INFO_TABLE.eval("""
-            target_year_t_{i} = ann_date//10000-1-{i}
-            target_flag_{i}= target_year_0-target_year_t_{i}
-            target_real_{i}=0
-            target_exp_ar_{i}=0
-            """.format(i=i), inplace=True)
+                target_year_t_{i} = ann_date//10000-1-{i}
+                target_flag_{i}= target_year_0-target_year_t_{i}
+                target_exp_real_{i}=0
+                target_exp_ar_{i}=0
+                """.format(i=i), inplace=True)
     # 更新需要的滞后年份
-    MV_INFO_TABLE['target_flag_{}'.format(i)] = np.where(MV_INFO_TABLE['target_flag_{}'.format(i)] > LAG_PERIOD, 0,
+    MV_INFO_TABLE['target_flag_{}'.format(i)] = np.where(MV_INFO_TABLE['target_flag_{}'.format(i)] > LAG_PERIOD - 1, 0,
                                                          MV_INFO_TABLE['target_flag_{}'.format(i)])
 
     for j in range(LAG_PERIOD):
         same_expr = MV_INFO_TABLE['target_flag_{}'.format(i)] == j
+        # print(i,j)
         # same_expr = MV_INFO_TABLE.eval('target_flag_{}==@j'.format(i))
         # ---------------填充-实际历史分红----------------#
-        MV_INFO_TABLE['target_real_{}'.format(i)] = np.where(same_expr,
-                                                             MV_INFO_TABLE['target_year_sum_{}'.format(j)],
-                                                             MV_INFO_TABLE['target_real_{}'.format(i)])
+        MV_INFO_TABLE['target_exp_real_{}'.format(i)] = np.where(
+            same_expr,
+            MV_INFO_TABLE['target_year_sum_{}'.format(j)],
+            MV_INFO_TABLE['target_exp_real_{}'.format(i)])
 
-        # ---------------填充-年化历史分红----------------#
-        MV_INFO_TABLE['target_exp_ar_{}'.format(i)] = np.where(same_expr,
-                                                               MV_INFO_TABLE['target_year_sum_ar_{}'.format(j)],
-                                                               MV_INFO_TABLE['target_exp_ar_{}'.format(i)])
+        # # ---------------填充-年化历史分红----------------#
+        MV_INFO_TABLE['target_flag_{}'.format(i)] = np.where(
+            same_expr,
+            MV_INFO_TABLE['target_year_sum_ar_{}'.format(j)],
+            MV_INFO_TABLE['target_flag_{}'.format(i)])
         del same_expr
-    # print('求滞后完成', time.time() - st)
 
-print('矩阵填充完成', time.time() - st)
+print('求滞后完成', time.time() - st)
 
 # ---------------OLS外推预期----------------#
 
@@ -166,7 +171,7 @@ print('OLS完成', time.time() - st)
 MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
 MV_INFO_TABLE = MV_INFO_TABLE[
     ['stockcode', 'ann_date'] +
-    ['{}_{}'.format(i, j) for i in ['target_year_t', 'target_real', 'target_exp_ar'] for j in range(LAG_PERIOD)]]
+    ['{}_{}'.format(i, j) for i in ['target_year_sum', 'target_exp_real'] for j in range(LAG_PERIOD)]]
 
 # MV_INFO_TABLE.to_csv('final.csv')
 # del MV_INFO_TABLE
