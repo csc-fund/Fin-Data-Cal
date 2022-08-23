@@ -2,9 +2,11 @@ import time
 import numpy as np
 import pandas as pd
 
-# python -m timeit cal_div_v5.py
-# ----------------参数和命名----------------#
+# ----------------参数----------------#
 LAG_PERIOD = 4  # 滞后期
+# 线性回归使用的参数
+VAR_X = np.var(range(LAG_PERIOD - 1), ddof=1)  # 计算X的方差 (样本 自由度-1)
+AVG_X = np.average(range(LAG_PERIOD - 1))  # 计算X的均值
 
 # ----------------读取原始数据----------------#
 DIV_TABLE = pd.read_parquet('AShareDividend.parquet')
@@ -156,22 +158,44 @@ for i in range(LAG_PERIOD):
 
 print('求滞后完成', time.time() - st)
 
-# ---------------OLS外推预期----------------#
-
-
+##################################################################
+# 5.线性外推预期
+##################################################################
 # 计算
-MV_INFO_TABLE.eval("""
-          target_exp_linear_0 = 0
+# for i in range(LAG_PERIOD)
+# 计算Y的均值
+# MV_INFO_TABLE['AVG_Y'] = np.average(MV_INFO_TABLE[['target_exp_real_3', 'target_exp_real_2', 'target_exp_real_1']],
+#                                     axis=1)
+# # 计算Y的方差 (样本 自由度-1)
+# MV_INFO_TABLE['VAR_Y'] = np.var(MV_INFO_TABLE[['target_exp_real_3', 'target_exp_real_2', 'target_exp_real_1']], axis=1,
+#                                 ddof=1)
+Y = np.array(MV_INFO_TABLE[['target_exp_real_3', 'target_exp_real_2', 'target_exp_real_1']])
+X = np.array([[0, 1, 2]] * Y.shape[0])
 
-          """, inplace=True)
 
-print('OLS完成', time.time() - st)
+#                                 ddof=1)
+
+
+
+# ----------------计算XY的协方差----------------#
+# MV_INFO_TABLE['COV_XY']=np.cov(, axis=1,ddof=1)
+# 协方差(样本): SUM(Yi-EY)*(Xi-EX)/N-1
+# MV_INFO_TABLE.eval("""
+#
+# """, inplace=True)
+# MV_INFO_TABLE.eval("""
+#               avg_y = (target_exp_real_3+target_exp_real_2+target_exp_real_1)/3 #计算分红列的均值 AVG(Y)
+#               var_y= @np.var([target_exp_real_3,target_exp_real_2,target_exp_real_1],axis=1, ddof=1)     #计算分红列的方差 (样本 自由度-1) VAR(Y)
+#
+#               """, inplace=True)
+
+print('外推预期完成', time.time() - st)
 
 # ---------------输出目标数据---------------#
 MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
 MV_INFO_TABLE = MV_INFO_TABLE[
     ['stockcode', 'ann_date'] +
-    ['{}_{}'.format(i, j) for i in ['target_year_sum', 'target_exp_real'] for j in range(LAG_PERIOD)]]
+    ['{}_{}'.format(i, j) for i in ['target_year_t', 'target_exp_real'] for j in range(LAG_PERIOD)]]
 
 # MV_INFO_TABLE.to_csv('final.csv')
 # del MV_INFO_TABLE
