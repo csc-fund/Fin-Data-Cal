@@ -44,7 +44,7 @@ MV_INFO_TABLE.fillna(0, inplace=True)  # 没有merge到的缺失信息用0填充
 del MV_TABLE, INFO_TABLE, df_group  # 释放内存
 
 # ---------------测试数据---6007383在2018年3次分红------------#
-# MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['stockcode'] == '600738.SH']
+MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['stockcode'] == '600738.SH']
 
 ##################################################################
 # 3.矩阵计算
@@ -119,7 +119,7 @@ print('填充完成', time.time() - st)
 # ---------------求期望----------------#
 MV_INFO_TABLE.eval("""
 target_exp_year = ann_date//10000-1
-target_exp_year_pos=target_exp_year[(target_year_0-target_exp_year)<=@LAG_PERIOD]
+target_exp_year_pos=target_exp_year[(target_year_0-target_exp_year)<=@LAG_PERIOD]//1
 """, inplace=True)
 # np.where(MV_INFO_TABLE.eval('target_exp_year_pos'), MV_INFO_TABLE.eval(), MV_INFO_TABLE.eval())
 
@@ -130,5 +130,5 @@ MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
 # ---------------输出目标数据---------------#
 MV_INFO_TABLE = MV_INFO_TABLE[['stockcode', 'ann_date'] + [i for i in MV_INFO_TABLE.columns if 'target' in i]]
 # MV_INFO_TABLE.to_csv('final.csv')
-del MV_INFO_TABLE
+# del MV_INFO_TABLE
 # MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['ann_date'].astype('str').str[:-4].isin(['2017','2018', '2019'])]
