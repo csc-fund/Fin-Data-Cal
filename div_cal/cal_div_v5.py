@@ -123,17 +123,18 @@ for i in range(LAG_PERIOD):  # 填充滞后年份
             MV_INFO_TABLE['target_exp_real_{}'.format(i)])
 
         # # ---------------填充-年化历史分红----------------#
-        MV_INFO_TABLE['target_flag_{}'.format(i)] = np.where(
+        MV_INFO_TABLE['target_exp_ar_{}'.format(i)] = np.where(
             same_expr,
             MV_INFO_TABLE['target_year_cum_ar_{}'.format(j)],
-            MV_INFO_TABLE['target_flag_{}'.format(i)])
+            MV_INFO_TABLE['target_exp_ar_{}'.format(i)])
         del same_expr
 
 print('滞后年份填充完成', time.time() - st)
 
 ##################################################################
-# 5.线性外推预期 线性回归法
+# 5.预期分红计算
 ##################################################################
+# ---------------线性回归法---------------#
 Y = MV_INFO_TABLE[['target_exp_real' + '_{}'.format(i + 1) for i in reversed(range(OBS_J))]].to_numpy().T  # 转换pd为array
 X = np.array([[1] * OBS_J, range(OBS_J)]).T  # 系数矩阵
 X_PRE = np.array([[1] * PRE_K, range(OBS_J, OBS_J + PRE_K)]).T  # 待预测期矩阵
@@ -141,15 +142,28 @@ Y_PRED = X_PRE.dot(np.linalg.inv(X.T.dot(X)).dot(X.T).dot(Y)).T  # OLS参数矩�
 Y_PRED = np.where(Y_PRED < 0, 0, Y_PRED)  # 清除为0的预测值
 MV_INFO_TABLE = pd.concat(
     [MV_INFO_TABLE,
-     pd.DataFrame(Y_PRED, index=MV_INFO_TABLE.index, columns=['PRED_{}'.format(i) for i in range(PRE_K)])], axis=1)
-
+     pd.DataFrame(Y_PRED, index=MV_INFO_TABLE.index, columns=['EXP_REG_{}'.format(i) for i in range(PRE_K)])], axis=1)
+del X, Y, X_PRE, Y_PRED
 print('线性外推预期计算完成', time.time() - st)
 
-# ---------------输出目标数据---------------#
+# ---------------平均法 历史真实值---------------#
+MV_INFO_TABLE['EXP_AVG'] = np.average(
+    MV_INFO_TABLE[['target_exp_real' + '_{}'.format(i + 1) for i in reversed(range(OBS_J))]])
+
+# ---------------年化法---------------#
+MV_INFO_TABLE['EXP_AR'] = np.where(MV_INFO_TABLE['target_exp_ar_0'] > 0, MV_INFO_TABLE['target_exp_ar_0'],
+                                   MV_INFO_TABLE['target_exp_ar_1'])  # 年化值为0的时候取上一年的年化分红
+
+# ---------------滞后法 取上一年实际分红---------------#
+MV_INFO_TABLE['EXP_LAG1'] = np.where(MV_INFO_TABLE['target_exp_real_0'] > 0, MV_INFO_TABLE['target_exp_real_0'],
+                                     MV_INFO_TABLE['target_exp_real_1'])  # 实际值为0的时候取上一年的实际分红
+
+##################################################################
+# 输出目标数据
+##################################################################
 MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
 MV_INFO_TABLE = MV_INFO_TABLE[
-    ['stockcode', 'ann_date'] + ['PRED_0'] +
+    ['stockcode', 'ann_date'] + ['EXP_REG_0'] + ['EXP_AVG'] + ['EXP_AR'] + ['EXP_LAG1'] +
     ['{}_{}'.format(i, j) for i in ['target_year_t', 'target_exp_real'] for j in range(LAG_PERIOD)]]
-
 # df6['id']=pd.concat([df['id'] for df in dfs])
 # MV_INFO_TABLE.to_csv('final.csv')
