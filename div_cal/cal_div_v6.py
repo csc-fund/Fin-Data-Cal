@@ -30,7 +30,7 @@ INFO_TABLE.reset_index(inplace=True)
 ##################################################################
 # 2.用MV_TABLE表与INFO_TABLE表 在stockcode上使用左外连接合并
 ##################################################################
-MV_TABLE = pd.read_parquet('mv.parquet')[['stockcode', 'ann_date', ]]
+MV_TABLE = pd.read_parquet('mv.parquet', columns=['stockcode', 'ann_date', ])
 MV_INFO_TABLE = pd.merge(MV_TABLE, INFO_TABLE, how='left', on='stockcode')
 MV_INFO_TABLE.fillna(0, inplace=True)  # 没有merge到的缺失信息用0填充
 info_dtype = {i: 'uint32' for i in INFO_TABLE.columns if ('ann_date' in i) | ('report_period' in i)}
@@ -41,7 +41,7 @@ del MV_TABLE, INFO_TABLE, df_group  # 释放内存
 ##################################################################
 # 测试数据---600738.SH在2018年有3次分红
 ##################################################################
-MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['stockcode'] == '600738.SH']
+# MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['stockcode'] == '600738.SH']
 st = time.time()
 
 ##################################################################
@@ -76,40 +76,38 @@ for i in range(LAG_PERIOD):
 print('目标年份填充完成', time.time() - st)
 
 ##################################################################
-# 压缩数据 如果不压缩数据,后面计算指标的时候会内存不足
+# 压缩数据
 ##################################################################
-MV_INFO_TABLE = MV_INFO_TABLE[
-    ['stockcode', 'ann_date'] +
-    # ['{}_{}'.format(i, j) for i in ['report_year', 'ar_factor'] for j in range(LAG_NUM)] +
-    ['{}_{}'.format(i, j) for i in ['target_div', 'target_div_ar'] for j in
-     range(LAG_PERIOD)]]
-MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
-info_dtype = {i: 'float32' for i in MV_INFO_TABLE.columns if ('target_div' in i) | ('target_div_ar' in i)}
-MV_INFO_TABLE = MV_INFO_TABLE.astype(info_dtype)
-# print(MV_INFO_TABLE.info())
-print('压缩数据完成', time.time() - st)
+target_df = MV_INFO_TABLE.loc[:, ['stockcode', 'ann_date'] +
+                                 ['target_div_{}'.format(i) for i in range(LAG_PERIOD)] +
+                                 ['target_div_ar_{}'.format(i) for i in range(LAG_PERIOD)]]
+del MV_INFO_TABLE
+info_dtype = {i: 'float32' for i in target_df.columns if ('target_div' in i) | ('target_div_ar' in i)}
+traget_df = target_df.astype(info_dtype)
+print('数据压缩完成', time.time() - st)
+# traget_df.sort_values(by='ann_date', ascending=False, inplace=True)
 
 ##################################################################
 # 5.预期分红计算
 ##################################################################
 # ---------------线性回归法---------------#
-Y = np.array(MV_INFO_TABLE[['target_div_{}'.format(i + 1) for i in reversed(range(OBS_J))]]).T
+Y = np.array(traget_df[['target_div_{}'.format(i + 1) for i in reversed(range(OBS_J))]]).T
 X = np.array([[1] * OBS_J, range(OBS_J)]).T  # 系数矩阵
 X_PRE = np.array([[1] * PRE_K, range(OBS_J, OBS_J + PRE_K)]).T  # 待预测期矩阵
 Y_PRED = X_PRE.dot(np.linalg.inv(X.T.dot(X)).dot(X.T).dot(Y)).T  # OLS参数矩阵公式 Beta=(X'Y)/(X'X), Y=BetaX
 del X, X_PRE, Y
 Y_PRED = np.where(Y_PRED < 0, 0, Y_PRED)  # 清除为0的预测值
-MV_INFO_TABLE = pd.concat(
-    [MV_INFO_TABLE,
-     pd.DataFrame(Y_PRED, index=MV_INFO_TABLE.index, columns=['EXP_REG_{}'.format(i) for i in range(PRE_K)])], axis=1)
+traget_df = pd.concat(
+    [traget_df,
+     pd.DataFrame(Y_PRED, index=traget_df.index, columns=['EXP_REG_{}'.format(i) for i in range(PRE_K)])], axis=1)
 del Y_PRED
 
 # ---------------平均法 历史真实值---------------#
-MV_INFO_TABLE['EXP_AVG'] = np.average(
-    MV_INFO_TABLE[['target_div_{}'.format(i + 1) for i in reversed(range(OBS_J))]], axis=1)
+traget_df['EXP_AVG'] = np.average(
+    traget_df[['target_div_{}'.format(i + 1) for i in reversed(range(OBS_J))]], axis=1)
 
 # ---------------年化法+滞后法---------------#  t-0为0时,取t-1年的分红,还为0时取t-2的年化分红
-MV_INFO_TABLE.eval("""
+traget_df.eval("""
 EXP_AR=(target_div_ar_0>0)*target_div_ar_0+(target_div_ar_0<=0)*target_div_ar_1+(target_div_ar_1<=0)*target_div_ar_2
 EXP_REAL=(target_div_0>0)*target_div_0+(target_div_0<=0)*target_div_1+(target_div_1<=0)*target_div_2
 """, inplace=True)
@@ -118,8 +116,7 @@ print('预期计算完成', time.time() - st)
 ##################################################################
 # 输出目标数据
 ##################################################################
-MV_INFO_TABLE = MV_INFO_TABLE[
-    ['stockcode', 'ann_date'] + ['EXP_REAL', 'EXP_AR', 'EXP_AVG', 'EXP_REG_0']]
+traget_df = traget_df[['stockcode', 'ann_date'] + ['EXP_REAL', 'EXP_AR', 'EXP_AVG', 'EXP_REG_0']]
 # MV_INFO_TABLE.to_csv('final.csv')
 
 
