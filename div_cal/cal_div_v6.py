@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 
 # ----------------参数----------------#
-LAG_NUM = 5  # 历史信息滞后数量
-LAG_PERIOD = 4  # 历史信息滞后期
+LAG_NUM = 15  # 历史信息滞后数量
+LAG_PERIOD = 10  # 历史信息滞后期
 OBS_J = 3  # 观测期
 PRE_K = 1  # 预测期
 
@@ -61,12 +61,7 @@ print('基础矩阵计算完成', time.time() - st)
 ##################################################################
 # 4.在目标输出列中用where迭代填充
 ##################################################################
-# MV_INFO_TABLE.eval('ar_activate_xxx=0', inplace=True)
-# MV_INFO_TABLE.eval('ar_activate_xxx= ar_activate_xxx *(target_year_3!=report_year_3)+ ar_factor_3 *(target_year_3==report_year_3)', inplace=True)
-# MV_INFO_TABLE.eval('ar_activate_xxx= ar_activate_xxx *(target_year_3!=report_year_2)+ ar_factor_2 *(target_year_3==report_year_2)', inplace=True)
-# MV_INFO_TABLE.eval('ar_activate_xxx= ar_activate_xxx *(target_year_3!=report_year_1)+ ar_factor_1 *(target_year_3==report_year_1)', inplace=True)
-# MV_INFO_TABLE.eval('ar_activate_xxx=ar_factor_1 *(target_year_3==report_year_1)', inplace=True)
-# MV_INFO_TABLE.eval('ar_activate_xxx=ar_factor_0 *(target_year_3==report_year_0)', inplace=True)
+
 
 for i in range(LAG_PERIOD):  # 填充目标日期矩阵
     MV_INFO_TABLE.eval("""
@@ -86,16 +81,17 @@ print('目标年份填充完成', time.time() - st)
 ##################################################################
 # 调试信息
 ##################################################################
+# ----------------删除中间矩阵----------------#
 MV_INFO_TABLE = MV_INFO_TABLE[
     ['stockcode'] + ['ann_date'] +
-    ['{}_{}'.format(i, j) for i in ['report_year', 'ar_factor'] for j in range(LAG_NUM)] +
-    ['{}_{}'.format(i, j) for i in ['target_year', 'target_ar', 'target_div', 'target_div_ar'] for j in
+    # ['{}_{}'.format(i, j) for i in ['report_year', 'ar_factor'] for j in range(LAG_NUM)] +
+    ['{}_{}'.format(i, j) for i in ['target_div', 'target_div_ar'] for j in
      range(LAG_PERIOD)]]
 MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
+info_dtype = {i: 'float32' for i in MV_INFO_TABLE.columns if ('target_div' in i) | ('target_div_ar' in i)}
+MV_INFO_TABLE = MV_INFO_TABLE.astype(info_dtype)  # 压缩数据
 
 print(MV_INFO_TABLE.info())
-
-
 
 ##################################################################
 # 5.预期分红计算
@@ -103,17 +99,18 @@ print(MV_INFO_TABLE.info())
 # ---------------线性回归法---------------#
 # print(['target_exp_real_{}'.format(i + 1) for i in reversed(range(OBS_J))])
 # Y=MV_INFO_TABLE.columns[['target_exp_real_{}'.format(i + 1) for i in reversed(range(OBS_J))]]
-Y = np.array(MV_INFO_TABLE[['target_exp_real_{}'.format(i + 1) for i in reversed(range(OBS_J))]]).T
-print(Y.shape)
+Y = np.array(MV_INFO_TABLE[['target_div_{}'.format(i + 1) for i in reversed(range(OBS_J))]]).T
 X = np.array([[1] * OBS_J, range(OBS_J)]).T  # 系数矩阵
 X_PRE = np.array([[1] * PRE_K, range(OBS_J, OBS_J + PRE_K)]).T  # 待预测期矩阵
 Y_PRED = X_PRE.dot(np.linalg.inv(X.T.dot(X)).dot(X.T).dot(Y)).T  # OLS参数矩阵公式 Beta=(X'Y)/(X'X), Y=BetaX
+del X, X_PRE, Y
 Y_PRED = np.where(Y_PRED < 0, 0, Y_PRED)  # 清除为0的预测值
 MV_INFO_TABLE = pd.concat(
     [MV_INFO_TABLE,
      pd.DataFrame(Y_PRED, index=MV_INFO_TABLE.index, columns=['EXP_REG_{}'.format(i) for i in range(PRE_K)])], axis=1)
-del X, X_PRE, Y, Y_PRED
+del Y_PRED
 
+print('线性回归完成', time.time() - st)
 # ---------------平均法 历史真实值---------------#
 MV_INFO_TABLE['EXP_AVG'] = np.average(
     MV_INFO_TABLE[['target_exp_real_{}'.format(i + 1) for i in reversed(range(OBS_J))]], axis=1)
@@ -134,11 +131,24 @@ print('预期计算完成', time.time() - st)
 ##################################################################
 # 输出目标数据
 ##################################################################
-MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
-MV_INFO_TABLE = MV_INFO_TABLE[['test'] +
-                              ['stockcode', 'ann_date'] + ['EXP_REG_0'] + ['EXP_AVG'] + ['EXP_AR'] + ['EXP_LAG']
-                              + ['{}_{}'.format(i, j) for i in ['target_year_t', 'target_exp_real'] for j in
-                                 range(LAG_PERIOD)]
-                              ]
+# MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
+
+MV_INFO_TABLE.to_csv('final.csv')
+
+
+
+
+##################################################################
+# 调试代码
+##################################################################
+
+# 生成新列效率
 # df6['id']=pd.concat([df['id'] for df in dfs])
-# MV_INFO_TABLE.to_csv('final.csv')
+
+# 逻辑表达式
+# MV_INFO_TABLE.eval('ar_activate_xxx=0', inplace=True)
+# MV_INFO_TABLE.eval('ar_activate_xxx= ar_activate_xxx *(target_year_3!=report_year_3)+ ar_factor_3 *(target_year_3==report_year_3)', inplace=True)
+# MV_INFO_TABLE.eval('ar_activate_xxx= ar_activate_xxx *(target_year_3!=report_year_2)+ ar_factor_2 *(target_year_3==report_year_2)', inplace=True)
+# MV_INFO_TABLE.eval('ar_activate_xxx= ar_activate_xxx *(target_year_3!=report_year_1)+ ar_factor_1 *(target_year_3==report_year_1)', inplace=True)
+# MV_INFO_TABLE.eval('ar_activate_xxx=ar_factor_1 *(target_year_3==report_year_1)', inplace=True)
+# MV_INFO_TABLE.eval('ar_activate_xxx=ar_factor_0 *(target_year_3==report_year_0)', inplace=True)
