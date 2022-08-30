@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 ##################################################################
 # 参数
@@ -57,24 +58,23 @@ print('合并完成', time.time() - st)
 fill_columns = [j + '_{}'.format(i) for i in range(LAG_PERIOD) for j in ['ann_date', 'report_period', 'dvd_pre_tax']]
 MV_INFO_TABLE.loc[:, fill_columns].fillna(0, inplace=True)
 print('空值填充完成', time.time() - st)
-for i in range(LAG_NUM):
-
+for i in tqdm(range(LAG_NUM)):
     MV_INFO_TABLE.eval("""
     dvd_pre_tax_info_{i} = dvd_pre_tax_{i} *(ann_date_{i}<ann_date)                  #分红矩阵
     report_year_{i} = report_period_{i}//10000 *(ann_date_{i}<ann_date)              #报告期矩阵
-    ar_factor_{i} = (1/(report_period_{i}[report_period_{i}!=0]%10000/1231)-1) *(ann_date_{i}<ann_date)    #年化因子矩阵 
+    ar_factor_{i} = (1/(report_period_{i}%10000/1231)-1) *(ann_date_{i}<ann_date)    #年化因子矩阵
     """.format(i=i), inplace=True)
-
-    # MV_INFO_TABLE['ar_factor_{}'.format(i)].fillna(0, inplace=True)
-    print('eval_{}'.format(i), time.time() - st)
+    MV_INFO_TABLE['ar_factor_{}'.format(i)] = np.where(np.isinf(MV_INFO_TABLE['ar_factor_{}'.format(i)]), 0,
+                                                       MV_INFO_TABLE['ar_factor_{}'.format(i)])  # 修正除0错误
 
 print('基础矩阵计算完成', time.time() - st)
 print('基础矩阵计算完成', time.time() - st)
+# ar_factor_{i} = (1/(report_period_{i}[report_period_{i}!=0]%10000/1231)-1) *(ann_date_{i}<ann_date)    #年化因子矩阵
 
 ##################################################################
 # 4.在目标输出列中填充
 ##################################################################
-for i in range(LAG_PERIOD):
+for i in tqdm(range(LAG_PERIOD)):
     MV_INFO_TABLE.eval("""
     target_year_{i} = ann_date//10000-1-{i}      #目标年份矩阵
     target_div_{i} = 0                           #目标年份 分红矩阵-实际
