@@ -36,7 +36,7 @@ INFO_TABLE = pd.pivot_table(df_group, index=['stockcode'], columns=['ANNDATE_MAX
                             values=['ann_date', 'report_period', 'dvd_pre_tax'])
 # INFO_TABLE.reset_index(inplace=True)
 
-
+st = time.time()
 ##################################################################
 # 2.MV_TABLE表与INFO_TABLE表进行矩阵计算
 ##################################################################
@@ -45,7 +45,7 @@ MV_TABLE = pd.read_parquet('mv.parquet')
 MV_TABLE = MV_TABLE[['stockcode', 'ann_date', ]]
 MV_INFO_TABLE = pd.merge(MV_TABLE, INFO_TABLE[['ann_date', 'report_period', 'dvd_pre_tax']], how='left', on='stockcode')
 
-# print(time.time()-st)
+print(time.time()-st)
 MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['stockcode'] == '600738.SH']
 
 # ---------------矩阵运算----------------#
