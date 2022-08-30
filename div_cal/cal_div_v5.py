@@ -4,7 +4,7 @@ import pandas as pd
 
 # ----------------参数----------------#
 LAG_NUM = 10  # 历史信息滞后数量
-LAG_PERIOD = 5  # 历史信息滞后期
+LAG_PERIOD = 10  # 历史信息滞后期
 OBS_J = 3  # 观测期
 PRE_K = 1  # 预测期
 
@@ -21,7 +21,6 @@ del DIV_TABLE
 df_group['ANNDATE_MAX'] = df_group.groupby(['stockcode'])['ann_date'].cumcount()  # 由于已经排序,cumcount值就是日期从近到远的顺序
 INFO_TABLE = pd.pivot_table(df_group, index=['stockcode'], columns=['ANNDATE_MAX'],
                             values=['ann_date', 'report_period', 'dvd_pre_tax'])  # 转置:按照信息排序后转置
-
 
 ##################################################################
 # 2.用MV_TABLE表与INFO_TABLE表在stockcode上使用左外连接合并
@@ -51,8 +50,9 @@ for i in range(LAG_PERIOD):  # 信息矩阵,年化因子矩阵,报告期矩阵,�
         MV_INFO_TABLE.eval('(1/(report_period_{i} % 10000 / 1231)-1)*info_{i}'.format(i=i)), 0.0)
     # ---------------其他矩阵----------------#
     MV_INFO_TABLE.eval("""
+       
         info_report_year_{i} = report_period_{i} * info_{i} //10000 #报告期矩阵
-        dvd_pre_tax_sum_{i} = dvd_pre_tax_{i}*info_{i} #累积分红矩阵
+        dvd_pre_tax_sum_{i} = dvd_pre_tax_{i} * info_{i} #累积分红矩阵
         ar_activate_{i} = info_report_ar_{i} #分红因子激活矩阵
         target_year_{i} = @TARGET_YEAR - @i #目标年份矩阵
         target_year_cum_{i} = 0.0 #目标年份累积矩阵-实际
@@ -137,7 +137,9 @@ print('滞后年份填充完成', time.time() - st)
 # 5.预期分红计算
 ##################################################################
 # ---------------线性回归法---------------#
-Y = MV_INFO_TABLE[['target_exp_real_{}'.format(i + 1) for i in reversed(range(OBS_J))]].to_numpy().T  # 转换pd为array
+# print(['target_exp_real_{}'.format(i + 1) for i in reversed(range(OBS_J))])
+# Y=MV_INFO_TABLE.columns[['target_exp_real_{}'.format(i + 1) for i in reversed(range(OBS_J))]]
+Y = np.array(MV_INFO_TABLE[['target_exp_real_{}'.format(i + 1) for i in reversed(range(OBS_J))]]).T
 print(Y.shape)
 X = np.array([[1] * OBS_J, range(OBS_J)]).T  # 系数矩阵
 X_PRE = np.array([[1] * PRE_K, range(OBS_J, OBS_J + PRE_K)]).T  # 待预测期矩阵
@@ -169,7 +171,7 @@ print('预期计算完成', time.time() - st)
 # 输出目标数据
 ##################################################################
 MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
-MV_INFO_TABLE = MV_INFO_TABLE[
+MV_INFO_TABLE = MV_INFO_TABLE[['test']+
     ['stockcode', 'ann_date'] + ['EXP_REG_0'] + ['EXP_AVG'] + ['EXP_AR'] + ['EXP_LAG']
     + ['{}_{}'.format(i, j) for i in ['target_year_t', 'target_exp_real'] for j in range(LAG_PERIOD)]
     ]
