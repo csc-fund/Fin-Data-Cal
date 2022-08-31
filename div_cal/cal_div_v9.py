@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-import time
 
 ##################################################################
 # 参数
@@ -36,16 +35,15 @@ df_0 = pd.merge(MV_TABLE, DIV_P_TABLE, how='left', on='stockcode')
 del MV_TABLE, DIV_P_TABLE  # 释放内存
 
 ##################################################################
-# 测试数据---600738.SH在2018年有3次分红
+# 测试数据---600738.SH在2018年有3次分红 已核对
 ##################################################################
-df_0 = df_0[df_0['stockcode'] == '600738.SH']
-df_0.sort_values(by='ann_date', ascending=False, inplace=True)
+# df_0 = df_0[df_0['stockcode'] == '600738.SH']
+# df_0.sort_values(by='ann_date', ascending=False, inplace=True)
 df_t = df_0[['stockcode', 'ann_date']].astype({'stockcode': 'category'})  # 前两列标识列
 
 ##################################################################
 # 3.求出用于计算的不同矩阵 df_1
 ##################################################################
-st = time.time()
 df_1 = pd.DataFrame()
 for i in tqdm(range(LAG_NUM)):  # 每个循环1.5秒
     df_1['report_year_{}'.format(i)] = pd.eval(
@@ -62,7 +60,6 @@ for i in tqdm(range(LAG_NUM)):  # 每个循环1.5秒
                                               df_1['ar_factor_{}'.format(i)]).astype('float16')  # isinf修正除0错误
     df_1['dvd_info_{}'.format(i)] = np.where(np.isnan(df_1['dvd_info_{}'.format(i)]), 0,
                                              df_1['dvd_info_{}'.format(i)])
-print('cal1', time.time() - st)
 ##################################################################
 # 4.在目标输出列中填充 df_2
 ##################################################################
@@ -83,7 +80,6 @@ for i in tqdm(range(LAG_PERIOD)):  # 目标滞后期输出列 # 每个循环7秒
     df_2['target_div_{}'.format(i)] = df_1['target_div_{}'.format(i)]
     df_2['target_div_ar_{}'.format(i)] = pd.eval('df_1.target_div_{i}*(1+df_1.target_ar_{i})'.format(i=i))
 del df_1
-print('cal2', time.time() - st)
 
 ##################################################################
 # 5.预期分红计算 df_div
@@ -107,7 +103,6 @@ df_div['EXP_REAL'] = pd.eval(
 # ---------------实际值---------------#
 df_div['REAL'] = df_2['target_div_0']
 del df_2
-print('cal3', time.time() - st)
 
 ##################################################################
 # 6.支付率计算 df_pro
@@ -122,14 +117,3 @@ df_pay['EXP_AVG_RATIO'] = pd.eval('df_div.EXP_AVG/df_pay.net_profit_parent_comp_
 df_pay['EXP_AR_RATIO'] = pd.eval('df_div.EXP_AR/df_pay.net_profit_parent_comp_ttm').astype('float16')
 df_pay['EXP_REG_0_RATIO'] = pd.eval('df_div.EXP_REG_0/df_pay.net_profit_parent_comp_ttm').astype('float16')
 del df_t, df_pay['net_profit_parent_comp_ttm']
-print('cal4', time.time() - st)
-
-##################################################################
-#  调试 #
-##################################################################
-# fill_columns = [j + '_{}'.format(i) for i in range(LAG_NUM) for j in ['ann_date', 'report_period', 'dvd_pre_tax']]
-# for i in range(LAG_PERIOD):
-#     df_2['target_ar_{}'.format(i)] = df_1['target_ar_{}'.format(i)]
-# for j in range(LAG_NUM):
-#     df_2['report_year_{}'.format(j)] = df_1['report_year_{}'.format(j)]
-#     df_2['ar_factor_{}'.format(j)] = df_1['ar_factor_{}'.format(j)]
