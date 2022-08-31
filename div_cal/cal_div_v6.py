@@ -30,8 +30,6 @@ INFO_TABLE = pd.pivot_table(df_group, index=['stockcode'], columns=['ANNDATE_MAX
 INFO_TABLE.columns = [i[0] + '_{}'.format(i[1]) for i in INFO_TABLE.columns]  # 重命名列名
 INFO_TABLE.reset_index(inplace=True)
 
-print('转换完成', time.time() - st)
-
 ##################################################################
 # 2.用MV_TABLE表与INFO_TABLE表 在stockcode上使用左外连接合并
 ##################################################################
@@ -39,38 +37,49 @@ MV_TABLE = pd.read_parquet('mv.parquet', columns=['stockcode', 'ann_date', ])
 MV_INFO_TABLE = pd.merge(MV_TABLE, INFO_TABLE, how='left', on='stockcode')
 del MV_TABLE, INFO_TABLE, df_group  # 释放内存
 print('合并完成', time.time() - st)
-# MV_INFO_TABLE.fillna(0, inplace=True)
-# print('缺失值处理完成', time.time() - st)
-# info_dtype = {i: 'uint32' for i in MV_INFO_TABLE.columns if ('ann_date' in i) | ('report_period' in i)}
-# info_dtype.update({'stockcode': 'category'})
-# MV_INFO_TABLE = MV_INFO_TABLE.astype(info_dtype)  # 数据压缩
-
 
 ##################################################################
 # 测试数据---600738.SH在2018年有3次分红
 ##################################################################
-# MV_INFO_TABLE = MV_fill_columnsINFO_TABLE[MV_INFO_TABLE['stockcode'] == '600738.SH']
-#
+MV_INFO_TABLE = MV_INFO_TABLE[MV_INFO_TABLE['stockcode'] == '600738.SH']
+
 ##################################################################
 # 3.求出用于计算的不同矩阵
 ##################################################################
-# MV_INFO_TABLE['stockcode'] = MV_INFO_TABLE['stockcode'].astype('category')
-fill_columns = [j + '_{}'.format(i) for i in range(LAG_PERIOD) for j in ['ann_date', 'report_period', 'dvd_pre_tax']]
+fill_columns = [j + '_{}'.format(i) for i in range(LAG_NUM) for j in ['ann_date', 'report_period', 'dvd_pre_tax']]
 MV_INFO_TABLE.loc[:, fill_columns].fillna(0, inplace=True)
-print('空值填充完成', time.time() - st)
+print('fillna完成', time.time() - st)
+df_o = MV_INFO_TABLE
+df_new = pd.DataFrame()
 for i in tqdm(range(LAG_NUM)):
-    MV_INFO_TABLE.eval("""
-    dvd_pre_tax_info_{i} = dvd_pre_tax_{i} *(ann_date_{i}<ann_date)                  #分红矩阵
-    report_year_{i} = report_period_{i}//10000 *(ann_date_{i}<ann_date)              #报告期矩阵
-    ar_factor_{i} = (1/(report_period_{i}%10000/1231)-1) *(ann_date_{i}<ann_date)    #年化因子矩阵
-    """.format(i=i), inplace=True)
-    MV_INFO_TABLE['ar_factor_{}'.format(i)] = np.where(np.isinf(MV_INFO_TABLE['ar_factor_{}'.format(i)]), 0,
-                                                       MV_INFO_TABLE['ar_factor_{}'.format(i)])  # 修正除0错误
+    eval_str = ['df_o.dvd_pre_tax_{i} *(df_o.ann_date_{i}<df_o.ann_date) #分红矩阵',
+                'df_o.report_period_{i}//10000 *(df_o.ann_date_{i}<df_o.ann_date) #报告期矩阵',
+                '(1/(df_o.report_period_{i}%10000/1231)-1) *(df_o.ann_date_{i}<df_o.ann_date)  #年化因子矩阵']
+    # tar_column = ['dvd_info_{i}', 'report_year_{i}', 'ar_factor_{i}']
 
-print('基础矩阵计算完成', time.time() - st)
-print('基础矩阵计算完成', time.time() - st)
-# ar_factor_{i} = (1/(report_period_{i}[report_period_{i}!=0]%10000/1231)-1) *(ann_date_{i}<ann_date)    #年化因子矩阵
+    df_new['dvd_info_{}'.format(i)], df_new['report_year_{}'.format(i)], df_new['ar_factor_{}'.format(i)] = map(
+        lambda x: pd.eval(str(x).format(i=i)), eval_str)
 
+    #
+    # df_new['dvd_info_{}'.format(i)] = pd.eval(eval_str[0].format(i=i))
+    # df_new['report_year_{}'.format(i)] = pd.eval(eval_str[0].format(i=i))
+    # df_new['ar_factor_{}'.format(i)] = pd.eval(eval_str[0].format(i=i))
+
+    # df_new['dvd_info_{}'.format(i)] = pd.eval(eval_str1)
+    # for s in eval_str:
+    #     print(s.format(i=i))
+    #     pd.eval(str(s).format(i=i))
+    # pd.eval("""
+    # df_n.dvd_info_{i} = df_o.dvd_pre_tax_{i} *(df_o.ann_date_{i}<df_o.ann_date)                          #分红矩阵
+    # df_n.report_year_{i} = df_o.report_period_{i}//10000 *(df_o.ann_date_{i}<df_o.ann_date)              #报告期矩阵
+    # df_n.ar_factor_{i} = (1/(df_o.report_period_{i}%10000/1231)-1) *(df_o.ann_date_{i}<df_o.ann_date)    #年化因子矩阵
+    # """.format(i=i), inplace=True)
+    df_new['ar_factor_{}'.format(i)] = np.where(np.isinf(df_new['ar_factor_{}'.format(i)]), 0,
+                                                df_new['ar_factor_{}'.format(i)])  # 修正除0错误
+del df_o
+MV_INFO_TABLE = df_new
+print('基础矩阵计算完成', time.time() - st)
+exit()
 ##################################################################
 # 4.在目标输出列中填充
 ##################################################################
@@ -78,27 +87,27 @@ for i in tqdm(range(LAG_PERIOD)):
     MV_INFO_TABLE.eval("""
     target_year_{i} = ann_date//10000-1-{i}      #目标年份矩阵
     target_div_{i} = 0                           #目标年份 分红矩阵-实际
-    target_div_ar_{i} = 0                        #目标年份 分红矩阵-年化
     target_ar_{i} = 0                            #目标年份 年化因子激活矩阵
     """.format(i=i), inplace=True)
     for j in reversed(range(LAG_NUM)):  # 迭代填充 累加报告期到目标日期
         MV_INFO_TABLE.eval("""
-        target_div_{i} = target_div_{i} + dvd_pre_tax_{j}*(target_year_{i}==report_year_{j})
+        target_div_{i} = target_div_{i} + dvd_info_{j}*(target_year_{i}==report_year_{j})
         target_ar_{i} = target_ar_{i}*(target_year_{i}!=report_year_{j}) + ar_factor_{j} *(target_year_{i}==report_year_{j})
-        target_div_ar_{i} = target_div_{i}*(1+target_ar_{i})
+        target_div_ar_{i} = target_div_{i}*(1+target_ar_{i}) #年化分红
         """.format(i=i, j=j), inplace=True)
+drop_columns = [j + '_{}'.format(i) for i in range(LAG_PERIOD) for j in ['target_year', 'target_ar']]
+MV_INFO_TABLE.drop(drop_columns, axis=1, inplace=True)
 print('目标年份填充完成', time.time() - st)
 
 ##################################################################
 # 压缩数据
 ##################################################################
-MV_INFO_TABLE = MV_INFO_TABLE.loc[:, ['stockcode', 'ann_date'] +
-                                     ['target_div_{}'.format(i) for i in range(LAG_PERIOD)] +
-                                     ['target_div_ar_{}'.format(i) for i in range(LAG_PERIOD)]]
-print('数据索引完成', time.time() - st)
-info_dtype = {i: 'float32' for i in MV_INFO_TABLE.columns if ('target_div' in i) | ('target_div_ar' in i)}
-MV_INFO_TABLE = MV_INFO_TABLE.astype(info_dtype)
+zip_dtype = {i: 'float32' for i in
+             [j + '_{}'.format(i) for i in range(LAG_PERIOD) for j in ['target_div', 'target_div_ar']]}
+zip_dtype.update({'stockcode': 'category', 'ann_date': 'uint32'})
+MV_INFO_TABLE = MV_INFO_TABLE.astype(zip_dtype)
 # MV_INFO_TABLE.sort_values(by='ann_date', ascending=False, inplace=True)
+print('数据压缩完成', time.time() - st)
 
 ##################################################################
 # 5.预期分红计算
