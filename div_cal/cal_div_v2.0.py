@@ -34,7 +34,6 @@ MV_TABLE = pd.read_parquet('mv.parquet', columns=['stockcode', 'ann_date', ]).as
     {'ann_date': 'uint32', }).set_index('stockcode')
 # ---------------测试数据---600738.SH在2018年有3次分红 已核对--------- #
 # MV_TABLE = MV_TABLE[MV_TABLE.index == '600738.SH'].sort_values(by='ann_date', ascending=False)
-# pd.merge不创建numpy快,pd.join创建numpy快
 st = time.time()
 print('start', time.time() - st)
 np_code = MV_TABLE.index.to_numpy().reshape(MV_TABLE.shape[0], 1)
