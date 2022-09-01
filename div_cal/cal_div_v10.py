@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import time
+
 ##################################################################
 # 参数
 ##################################################################
@@ -19,72 +20,106 @@ DIV_TABLE = pd.read_parquet('AShareDividend.parquet',
                                      'cash_dvd_per_sh_pre_tax', 's_div_baseshare'])  # 读取原始数据 筛选计算列
 DIV_TABLE = DIV_TABLE[DIV_TABLE['s_div_progress'] == '3']  # 只保留3
 DIV_TABLE['dvd_pre_tax'] = DIV_TABLE['cash_dvd_per_sh_pre_tax'] * DIV_TABLE['s_div_baseshare'] * 10000  # 计算总分红
-DIV_TABLE.sort_values(['stockcode', 'ann_date'], ascending=[1, 0], inplace=True)  # 按照stockcode升序后,再按照ann_date降序
-DIV_TABLE = DIV_TABLE.groupby(['stockcode']).head(LAG_NUM)  # 取每个股票最近N个历史数据
+# 按照stockcode升序后,再按照ann_date降序 # 取每个股票最近N个历史数据
+DIV_TABLE = (DIV_TABLE.sort_values(['stockcode', 'ann_date'], ascending=[1, 0]).groupby(['stockcode']).head(LAG_NUM))
 DIV_TABLE['ANNDATE_MAX'] = DIV_TABLE.groupby(['stockcode'])['ann_date'].cumcount()  # 由于已经排序,cumcount值就是日期从近到远的顺序
 DIV_P_TABLE = pd.pivot_table(DIV_TABLE, index=['stockcode'], columns=['ANNDATE_MAX'],
-                             values=['ann_date', 'report_period', 'dvd_pre_tax'])  # 转置:按照信息排序后转置
+                             values=['ann_date', 'report_period', 'dvd_pre_tax']).fillna(0)  # 转置:按照信息排序后转置
 DIV_P_TABLE.columns = [i[0] + '_{}'.format(i[1]) for i in DIV_P_TABLE.columns]  # 重命名列名
-DIV_P_TABLE.reset_index(inplace=True)
+#
+# col_list = list(
+#     map(lambda x, y: str(x) + str(y),
+#         ['ann_date_'] * LAG_NUM + ['report_period_'] * LAG_NUM, [i for i in range(LAG_NUM)] * 2))
+# dtype_col = dict(zip(col_list, ['uint32'] * len(col_list)))
+# DIV_P_TABLE = DIV_P_TABLE.astype(dtype_col)
 del DIV_TABLE
+
+# df_0.sort_values(by='ann_date', ascending=False, inplace=True)
+# df_t = df_0[['stockcode', 'ann_date']].astype({'stockcode': 'category'})  # 前两列标识列
+
 ##################################################################
 # 2.合并MV_TABLE表与DIV_P_TABLE表 df_0
 ##################################################################
-MV_TABLE = pd.read_parquet('mv.parquet', columns=['stockcode', 'ann_date', ]).astype({'ann_date': 'uint32'})
-df_0 = pd.merge(MV_TABLE, DIV_P_TABLE, how='left', on='stockcode')
-del MV_TABLE, DIV_P_TABLE  # 释放内存
+MV_TABLE = pd.read_parquet('mv.parquet', columns=['stockcode', 'ann_date', ]).astype(
+    {'ann_date': 'uint32', }).set_index('stockcode')
 
 ##################################################################
 # 测试数据---600738.SH在2018年有3次分红 已核对
 ##################################################################
-df_0 = df_0[df_0['stockcode'] == '600738.SH']
-df_0.sort_values(by='ann_date', ascending=False, inplace=True)
-df_t = df_0[['stockcode', 'ann_date']].astype({'stockcode': 'category'})  # 前两列标识列
+# MV_TABLE = MV_TABLE[MV_TABLE.index == '600738.SH'].sort_values(by='ann_date', ascending=False)
 
-##################################################################
-# 3.求出用于计算的不同矩阵 df_1
-##################################################################
-df_1 = pd.DataFrame()
-
-
+# merge不创建numpy快,join创建numpy快
 st = time.time()
-print(st)
-for i in tqdm(range(LAG_NUM)):  # 每个循环1.5秒
-    df_1['report_year_{}'.format(i)] = pd.eval(
-        'df_0.report_period_{i}//10000 *(df_0.ann_date_{i}<df_0.ann_date)'.format(i=i))
-    df_1['ar_factor_{}'.format(i)] = pd.eval(
-        '(1/(df_0.report_period_{i}%10000/1231)-1) *(df_0.ann_date_{i}<df_0.ann_date) '.format(i=i))
-    df_1['dvd_info_{}'.format(i)] = pd.eval('df_0.dvd_pre_tax_{i} *(df_0.ann_date_{i}<df_0.ann_date)'.format(i=i))
-    # np.Where的速度比pd.fillna快 分开写np.Where比合在一起写快
-    df_1['report_year_{}'.format(i)] = np.where(np.isnan(df_1['report_year_{}'.format(i)]), 0,
-                                                df_1['report_year_{}'.format(i)]).astype('uint8')
-    df_1['ar_factor_{}'.format(i)] = np.where(np.isnan(df_1['ar_factor_{}'.format(i)]), 0,
-                                              df_1['ar_factor_{}'.format(i)])
-    df_1['ar_factor_{}'.format(i)] = np.where(np.isinf(df_1['ar_factor_{}'.format(i)]), 0,
-                                              df_1['ar_factor_{}'.format(i)]).astype('float16')  # isinf修正除0错误
-    df_1['dvd_info_{}'.format(i)] = np.where(np.isnan(df_1['dvd_info_{}'.format(i)]), 0,
-                                             df_1['dvd_info_{}'.format(i)])
+print('start', time.time() - st)
+np_code = MV_TABLE.index.to_numpy().reshape(MV_TABLE.shape[0], 1)
+np_trade_date = np.tile(MV_TABLE.iloc[:, 0].to_numpy('<u4'), (LAG_NUM, 1)).T  # trade_date
+MV_TABLE = MV_TABLE.iloc[:, :0]  # 移除trade_date
+np_ann_date = MV_TABLE.join(DIV_P_TABLE.iloc[:, LAG_NUM * 0:LAG_NUM * 1], how='left').to_numpy('<u4')  # ann_date
+np_dvd = MV_TABLE.join(DIV_P_TABLE.iloc[:, LAG_NUM * 1:LAG_NUM * 2], how='left').to_numpy('<f8')  # dvd_pre_tax
+np_report_period = MV_TABLE.join(DIV_P_TABLE.iloc[:, LAG_NUM * 2:], how='left').to_numpy('<u4')  # report_period
+
+print('end', time.time() - st)
+del MV_TABLE, DIV_P_TABLE  # 释放内存
+
+##################################################################
+# 3.求出用于计算的不同矩阵
+##################################################################
+print('start', time.time() - st)
+np_info = np_ann_date < np_trade_date
+np_dvd = np_dvd * np_info
+np_report_period = np_report_period * np_info
+np_report_year = (np_report_period // 10000).astype('<u2')
+np_ar_factor = np.where(np_report_period != 0, (1 / (np_report_period % 10000 / 1231) - 1), 0)
+del np_report_period, np_info
 print('ok', time.time() - st)
 
 ##################################################################
-# 4.在目标输出列中填充 df_2
+# 4.在目标输出列中填充
 ##################################################################
+print('start', time.time() - st)
+np_lag_year = np.array([np_trade_date[:, 0] // 10000]).T - (np.arange(LAG_PERIOD) + 1)  # 生成目标滞后年份矩阵
+np_dvd_lag = np_trade_date[:, 0].reshape(-1, 1)  # 生成储存结构
+for i in tqdm(range(LAG_PERIOD)):  # 在目标滞后年份矩阵中滑动填充
+    mask_dvd = (np.where(np_report_year == np.tile(np_lag_year[:, i].reshape(-1, 1), LAG_NUM), True, False)
+                * np_dvd).sum(axis=1).reshape(-1, 1)  # 累加同一年份的信息
+    np_dvd_lag = np.concatenate((np_dvd_lag, mask_dvd), axis=1)  # 拼接目标滞后年份
+print('end', time.time() - st)
+print('end', time.time() - st)
+
+# np_dv
+# 取出t-0滞后 生成比较矩阵
+# np_lag_0 = np.array([np_lag_year[:, 0]] * LAG_NUM).T
+
+# 比较
+# mask_0 = np.where(np_lag_0 == np_report_year, True, False)
+# res_0 = mask_0 * np_dvd
+# 累加有用信息
+# res_1 = res_0.sum(axis=1).reshape(-1, 1)
+
+# res_1 = np.flipud(np.flip(np.flipud(np.flip(res_0)).sum(axis=1))).reshape(-1, 1)
+# np_report_year_2 = np_report_year
+# mask = np.where(np_lag_year[:, 3] == np_report_year[:, 3], np_dvd[:, 3], 0).reshape(-1, 1)
+# mask1 = np.where(np_report_year == 2018, True, False)
+
+
+# res2 = mask1 * np_dvd
+# res3 = np.flipud(np.flip(np.flipud(np.flip(res2)).cumsum(axis=1)))
+# res3 = res2[::-1].cumsum(axis=1)[::-1]
+print('ok', time.time() - st)
+print('ok', time.time() - st)
 df_2 = pd.DataFrame()
-for i in range(LAG_PERIOD):
-    df_1['target_year_{}'.format(i)] = pd.eval('df_0.ann_date//10000-1-{i}'.format(i=i)).astype('uint8')  # 目标年份矩阵
-del df_0
 for i in tqdm(range(LAG_PERIOD)):  # 目标滞后期输出列 # 每个循环7秒
     df_1['target_ar_{}'.format(i)] = 0  # 年化因子激活矩阵
-    df_1['target_div_{}'.format(i)] = 0  # 目标分红矩阵
-    for j in reversed(range(LAG_NUM)):  # 迭代填充 累加报告期到目标日期
-        df_1['target_div_{}'.format(i)] = pd.eval(
-            'df_1.target_div_{i} + df_1.dvd_info_{j}*(df_1.target_year_{i}==df_1.report_year_{j})'.format(
-                i=i, j=j))  # 目标年份矩阵
-        df_1['target_ar_{}'.format(i)] = pd.eval(
-            'df_1.target_ar_{i}*(df_1.target_year_{i}!=df_1.report_year_{j}) + df_1.ar_factor_{j} *(df_1.target_year_{i}==df_1.report_year_{j})'.format(
-                i=i, j=j))  # 目标年份矩阵 -年化
-    df_2['target_div_{}'.format(i)] = df_1['target_div_{}'.format(i)]
-    df_2['target_div_ar_{}'.format(i)] = pd.eval('df_1.target_div_{i}*(1+df_1.target_ar_{i})'.format(i=i))
+df_1['target_div_{}'.format(i)] = 0  # 目标分红矩阵
+for j in reversed(range(LAG_NUM)):  # 迭代填充 累加报告期到目标日期
+    df_1['target_div_{}'.format(i)] = pd.eval(
+        'df_1.target_div_{i} + df_1.dvd_info_{j}*(df_1.target_year_{i}==df_1.report_year_{j})'.format(
+            i=i, j=j))  # 目标年份矩阵
+df_1['target_ar_{}'.format(i)] = pd.eval(
+    'df_1.target_ar_{i}*(df_1.target_year_{i}!=df_1.report_year_{j}) + df_1.ar_factor_{j} *(df_1.target_year_{i}==df_1.report_year_{j})'.format(
+        i=i, j=j))  # 目标年份矩阵 -年化
+df_2['target_div_{}'.format(i)] = df_1['target_div_{}'.format(i)]
+df_2['target_div_ar_{}'.format(i)] = pd.eval('df_1.target_div_{i}*(1+df_1.target_ar_{i})'.format(i=i))
 del df_1
 
 ##################################################################
