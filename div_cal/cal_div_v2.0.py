@@ -57,7 +57,7 @@ np_report_day = (np_report_period % 10000).astype('<u2')  # 报告日矩阵 :用
 print('ok 基础矩阵', time.time() - st)
 
 ##################################################################
-# 4.在目标输出列中填充  mask_same_year矩阵激活历史信息到目标滞后期
+# 4.在目标输出列中填充  mask_same_year 矩阵激活历史信息到目标滞后期
 ##################################################################
 print('start 填充', time.time() - st)
 np_lag_year = (np_trade_date // 10000 - (np.arange(LAG_PERIOD) + 1)).astype('<u2')  # 生成目标滞后年份矩阵
