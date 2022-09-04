@@ -33,7 +33,7 @@ DIV_P_TABLE.columns = [i[0] + '_{}'.format(i[1]) for i in DIV_P_TABLE.columns]  
 MV_TABLE = pd.read_parquet('mv.parquet', columns=['stockcode', 'ann_date', ]).astype(
     {'ann_date': 'uint32', }).set_index('stockcode')
 # ---------------测试数据---600738.SH在2018年有3次分红 已核对--------- #
-# MV_TABLE = MV_TABLE[MV_TABLE.index == '600738.SH'].sort_values(by='ann_date', ascending=False)
+MV_TABLE = MV_TABLE[MV_TABLE.index == '600738.SH'].sort_values(by='ann_date', ascending=False)
 st = time.time()
 print('start', time.time() - st)
 np_code = MV_TABLE.index.to_numpy().reshape(MV_TABLE.shape[0], 1)
@@ -67,7 +67,8 @@ for i in tqdm(range(LAG_PERIOD)):  # 在目标滞后年份矩阵中填充
     mask_same_year = np_report_year == np.take(np_lag_year, [i], axis=1)  # 生成同年份激活矩阵
     mask_dvd = (mask_same_year * np_dvd).sum(axis=1).reshape(-1, 1)  # 累加同一报告期分红
     msak_day = (mask_same_year * np_report_day).max(axis=1).reshape(-1, 1) / 1231  # 获得最新的报告期并年化
-    mask_dvd_ar = mask_dvd * np.divide(1, msak_day, where=msak_day != 0)
+    # mask_dvd_ar = mask_dvd * np.divide(1, msak_day, where=msak_day != 0)
+    mask_dvd_ar = np.where(msak_day != 0, mask_dvd / msak_day, 0)
     np_dvd_lag = np.concatenate((np_dvd_lag, mask_dvd), axis=1)  # 拼接目标滞后年份
     np_dvd_lag_ar = np.concatenate((np_dvd_lag_ar, mask_dvd_ar), axis=1)  # 拼接目标滞后年份
 print('end 填充', time.time() - st)

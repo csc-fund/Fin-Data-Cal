@@ -6,11 +6,8 @@ import time
 ##################################################################
 # 参数
 ##################################################################
-<<<<<<< HEAD
 LAG_NUM = 30  # 历史信息数量
-=======
 LAG_NUM = 20  # 历史信息数量
->>>>>>> origin/master
 LAG_PERIOD = 4  # 当前交易日滞后期
 OBS_J = 3  # 观测期 : 用于历史信息的平均预测和线性预测
 PRE_K = 1  # 预测期
@@ -30,7 +27,6 @@ DIV_TABLE['ANNDATE_MAX'] = DIV_TABLE.groupby(['stockcode'])['ann_date'].cumcount
 DIV_P_TABLE = pd.pivot_table(DIV_TABLE, index=['stockcode'], columns=['ANNDATE_MAX'],
                              values=['ann_date', 'report_period', 'dvd_pre_tax']).fillna(0)  # 转置:按照信息排序后转置
 DIV_P_TABLE.columns = [i[0] + '_{}'.format(i[1]) for i in DIV_P_TABLE.columns]  # 重命名列名
-<<<<<<< HEAD
 del DIV_TABLE
 
 ##################################################################
@@ -45,7 +41,6 @@ st = time.time()
 print('start', time.time() - st)
 np_code = MV_TABLE.index.to_numpy().reshape(MV_TABLE.shape[0], 1)
 np_trade_date = MV_TABLE.iloc[:, 0].to_numpy('<u4').reshape(-1, 1)  # 存储trade_date列
-=======
 #
 # col_list = list(
 #     map(lambda x, y: str(x) + str(y),
@@ -73,20 +68,15 @@ st = time.time()
 print('start', time.time() - st)
 np_code = MV_TABLE.index.to_numpy().reshape(MV_TABLE.shape[0], 1)
 np_trade_date = np.tile(MV_TABLE.iloc[:, 0].to_numpy('<u4'), (LAG_NUM, 1)).T  # trade_date
->>>>>>> origin/master
 MV_TABLE = MV_TABLE.iloc[:, :0]  # 移除trade_date
 np_ann_date = MV_TABLE.join(DIV_P_TABLE.iloc[:, LAG_NUM * 0:LAG_NUM * 1], how='left').to_numpy('<u4')  # ann_date
 np_dvd = MV_TABLE.join(DIV_P_TABLE.iloc[:, LAG_NUM * 1:LAG_NUM * 2], how='left').to_numpy('<f8')  # dvd_pre_tax
 np_report_period = MV_TABLE.join(DIV_P_TABLE.iloc[:, LAG_NUM * 2:], how='left').to_numpy('<u4')  # report_period
-<<<<<<< HEAD
-=======
 
->>>>>>> origin/master
 print('end', time.time() - st)
 del MV_TABLE, DIV_P_TABLE  # 释放内存
 
 ##################################################################
-<<<<<<< HEAD
 # 3.求出用于计算的不同矩阵 np_info矩阵激活可用历史信息,保证没有使用未来信息
 ##################################################################
 print('start 基础矩阵', time.time() - st)
@@ -112,7 +102,6 @@ for i in tqdm(range(LAG_PERIOD)):  # 在目标滞后年份矩阵中填充
     np_dvd_lag = np.concatenate((np_dvd_lag, mask_dvd), axis=1)  # 拼接目标滞后年份
     np_dvd_lag_ar = np.concatenate((np_dvd_lag_ar, mask_dvd_ar), axis=1)  # 拼接目标滞后年份
 print('end 填充', time.time() - st)
-=======
 # 3.求出用于计算的不同矩阵
 ##################################################################
 print('start', time.time() - st)
@@ -172,12 +161,10 @@ df_1['target_ar_{}'.format(i)] = pd.eval(
 df_2['target_div_{}'.format(i)] = df_1['target_div_{}'.format(i)]
 df_2['target_div_ar_{}'.format(i)] = pd.eval('df_1.target_div_{i}*(1+df_1.target_ar_{i})'.format(i=i))
 del df_1
->>>>>>> origin/master
 
 ##################################################################
 # 5.预期分红计算 df_div
 ##################################################################
-<<<<<<< HEAD
 print('start 输出', time.time() - st)
 # ---------------实际值---------------#
 np_real = np.take(np_dvd_lag, [1], axis=1)
@@ -233,4 +220,3 @@ df_pay['EXP_AVG_RATIO'] = pd.eval('df_div.EXP_AVG/df_pay.net_profit_parent_comp_
 df_pay['EXP_AR_RATIO'] = pd.eval('df_div.EXP_AR/df_pay.net_profit_parent_comp_ttm').astype('float16')
 df_pay['EXP_REG_0_RATIO'] = pd.eval('df_div.EXP_REG_0/df_pay.net_profit_parent_comp_ttm').astype('float16')
 del df_t, df_pay['net_profit_parent_comp_ttm']
->>>>>>> origin/master
