@@ -73,6 +73,7 @@ for i in tqdm(range(LAG_PERIOD)):  # 在目标滞后年份矩阵中填充
     np_dvd_lag_ar = np.concatenate((np_dvd_lag_ar, mask_dvd_ar), axis=1)  # 拼接目标滞后年份
 print('end 填充', time.time() - st)
 
+
 ##################################################################
 # 5.预期分红计算 df_div
 ##################################################################
