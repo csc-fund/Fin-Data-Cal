@@ -99,4 +99,5 @@ np_ols = np.where(np_ols < 0, 0, np_ols)  # 清除为0的预测值
 # ---------------拼接目标输出---------------#
 np_target = np.concatenate((np_code, np_trade_date, np_real, np_lag, np_avg, np_ar, np_ols), axis=1)
 print('end 输出', time.time() - st)
+print('end 输出', time.time() - st)
 
